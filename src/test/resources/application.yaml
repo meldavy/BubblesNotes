@@ -1,0 +1,15 @@
+ktor:
+  application:
+    modules:
+      - com.mel.bubblenotes.ApplicationKt.module
+  deployment:
+    port: 8080
+# Test configuration uses H2 in-memory database
+db:
+  url: "jdbc:h2:mem:test;DB_CLOSE_DELAY=-1"
+  user: sa
+  password:
+postgres:
+  url: "jdbc:h2:mem:test;DB_CLOSE_DELAY=-1"
+  user: sa
+  password:

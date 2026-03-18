@@ -1,0 +1,557 @@
+# REST API Contract: Notes App with AI Integration
+
+**Branch**: `notes-app-ai-integration` | **Date**: 2026-03-18 | **Version**: v1
+
+## Base URL
+
+```
+http://localhost:8080/api/v1
+```
+
+## Authentication
+
+All endpoints (except `/auth/google/login`) require authentication via:
+- **Header**: `Authorization: Bearer <oauth_token>` or `X-API-Key: <api_key>`
+- OAuth tokens are valid for 1 hour, refreshable via `/auth/refresh`
+- API keys have no expiration
+
+---
+
+## Endpoints
+
+### Authentication
+
+#### POST /auth/google/login
+
+Initiates Google OAuth login flow.
+
+**Request**:
+```json
+{
+  "redirect_uri": "string (URL)"
+}
+```
+
+**Responses**:
+- `200 OK`: Returns Google OAuth authorization URL
+- `400 Bad Request`: Invalid redirect URI
+
+---
+
+#### GET /auth/google/callback
+
+OAuth callback endpoint. Handles Google's response and creates/updates user session.
+
+**Query Parameters**:
+- `code`: Authorization code from Google
+- `state`: CSRF protection token
+
+**Responses**:
+- `302 Found`: Redirects to client with session cookie
+- `401 Unauthorized`: Invalid authorization code
+
+---
+
+#### POST /auth/logout
+
+Logs out the current user.
+
+**Headers**:
+- `Authorization: Bearer <token>`
+
+**Responses**:
+- `204 No Content`: Logout successful
+- `401 Unauthorized`: Invalid token
+
+---
+
+### Notes
+
+#### GET /notes
+
+Lists notes with pagination. Supports filtering by tag and search.
+
+**Query Parameters**:
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| cursor | string | Cursor for next page (last note ID) |
+| limit | integer | Results per page (default: 20, max: 100) |
+| tag | string | Filter by tag name |
+| search | string | Search in title, content, tags |
+
+**Headers**:
+- `Authorization: Bearer <token>`
+
+**Responses**:
+```json
+{
+  "notes": [
+    {
+      "id": 123,
+      "title": "Note Title",
+      "content_preview": "First 100 chars of content...",
+      "is_published": true,
+      "ai_title": null,
+      "ai_summary": null,
+      "tags": ["work", "personal"],
+      "attachment_count": 2,
+      "created_at": "2026-03-18T10:00:00Z",
+      "updated_at": "2026-03-18T10:05:00Z"
+    }
+  ],
+  "pagination": {
+    "has_next": true,
+    "next_cursor": "456",
+    "total_count": 150
+  }
+}
+```
+
+**Responses**:
+- `200 OK`: Success
+- `401 Unauthorized`: Invalid token
+
+---
+
+#### GET /notes/{id}
+
+Retrieves a specific note by ID.
+
+**Path Parameters**:
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| id | integer | Note ID |
+
+**Headers**:
+- `Authorization: Bearer <token>`
+
+**Responses**:
+```json
+{
+  "id": 123,
+  "title": "Note Title",
+  "content": "# Full markdown content...",
+  "is_published": true,
+  "ai_title": "Generated Title",
+  "ai_summary": "Summary text...",
+  "ai_tags": ["suggested", "tags"],
+  "tags": ["work", "personal"],
+  "attachments": [
+    {
+      "id": 1,
+      "filename": "document.pdf",
+      "content_type": "application/pdf",
+      "file_size": 102400
+    }
+  ],
+  "versions": [
+    {
+      "id": 1,
+      "title": "Previous Title",
+      "content_preview": "...",
+      "created_at": "2026-03-18T09:00:00Z"
+    }
+  ],
+  "created_at": "2026-03-18T10:00:00Z",
+  "updated_at": "2026-03-18T10:05:00Z"
+}
+```
+
+**Responses**:
+- `200 OK`: Success
+- `404 Not Found`: Note not found
+- `401 Unauthorized`: Invalid token
+
+---
+
+#### POST /notes
+
+Creates a new note.
+
+**Headers**:
+- `Authorization: Bearer <token>`
+- `Content-Type: application/json`
+
+**Request Body**:
+```json
+{
+  "title": "Note Title (optional)",
+  "content": "# Markdown content...",
+  "tags": ["work", "personal"],
+  "is_published": true
+}
+```
+
+**Responses**:
+```json
+{
+  "id": 123,
+  "title": "Note Title",
+  "content": "# Markdown content...",
+  "is_published": true,
+  "created_at": "2026-03-18T10:00:00Z"
+}
+```
+
+**Responses**:
+- `201 Created`: Note created
+- `400 Bad Request`: Invalid request body
+- `401 Unauthorized`: Invalid token
+
+---
+
+#### PUT /notes/{id}
+
+Updates an existing note.
+
+**Path Parameters**:
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| id | integer | Note ID |
+
+**Headers**:
+- `Authorization: Bearer <token>`
+- `Content-Type: application/json`
+
+**Request Body**:
+```json
+{
+  "title": "Updated Title",
+  "content": "# Updated markdown content...",
+  "tags": ["updated", "tags"],
+  "is_published": true
+}
+```
+
+**Responses**:
+```json
+{
+  "id": 123,
+  "title": "Updated Title",
+  "content": "# Updated markdown content...",
+  "is_published": true,
+  "updated_at": "2026-03-18T10:10:00Z"
+}
+```
+
+**Responses**:
+- `200 OK`: Note updated
+- `404 Not Found`: Note not found
+- `401 Unauthorized`: Invalid token
+
+---
+
+#### DELETE /notes/{id}
+
+Deletes a note.
+
+**Path Parameters**:
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| id | integer | Note ID |
+
+**Headers**:
+- `Authorization: Bearer <token>`
+
+**Responses**:
+- `204 No Content`: Note deleted
+- `404 Not Found`: Note not found
+- `401 Unauthorized`: Invalid token
+
+---
+
+### Attachments
+
+#### POST /notes/{id}/attachments
+
+Uploads a file attachment to a note.
+
+**Path Parameters**:
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| id | integer | Note ID |
+
+**Headers**:
+- `Authorization: Bearer <token>`
+- `Content-Type: multipart/form-data`
+
+**Request Body** (multipart form):
+| Field | Type | Description |
+|-------|------|-------------|
+| file | binary | File to upload |
+
+**Responses**:
+```json
+{
+  "id": 1,
+  "filename": "document.pdf",
+  "content_type": "application/pdf",
+  "file_size": 102400,
+  "created_at": "2026-03-18T10:00:00Z"
+}
+```
+
+**Responses**:
+- `201 Created`: File uploaded
+- `400 Bad Request`: File too large or invalid format
+- `404 Not Found`: Note not found
+- `401 Unauthorized`: Invalid token
+
+---
+
+#### GET /notes/{id}/attachments/{attachmentId}
+
+Downloads an attachment.
+
+**Path Parameters**:
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| id | integer | Note ID |
+| attachmentId | integer | Attachment ID |
+
+**Headers**:
+- `Authorization: Bearer <token>`
+
+**Responses**:
+- `200 OK`: File content (binary)
+- `404 Not Found`: Attachment not found
+- `401 Unauthorized`: Invalid token
+
+---
+
+### Tags
+
+#### GET /tags
+
+Lists all tags for the current user.
+
+**Headers**:
+- `Authorization: Bearer <token>`
+
+**Responses**:
+```json
+{
+  "tags": [
+    {
+      "id": 1,
+      "name": "work",
+      "note_count": 5,
+      "created_at": "2026-03-18T10:00:00Z"
+    }
+  ]
+}
+```
+
+**Responses**:
+- `200 OK`: Success
+- `401 Unauthorized`: Invalid token
+
+---
+
+#### POST /tags
+
+Creates a new tag.
+
+**Headers**:
+- `Authorization: Bearer <token>`
+- `Content-Type: application/json`
+
+**Request Body**:
+```json
+{
+  "name": "new-tag"
+}
+```
+
+**Responses**:
+```json
+{
+  "id": 1,
+  "name": "new-tag",
+  "created_at": "2026-03-18T10:00:00Z"
+}
+```
+
+**Responses**:
+- `201 Created`: Tag created
+- `409 Conflict`: Tag already exists for user
+- `401 Unauthorized`: Invalid token
+
+---
+
+### Search
+
+#### POST /search
+
+Searches notes across content, tags, and attachments.
+
+**Headers**:
+- `Authorization: Bearer <token>`
+- `Content-Type: application/json`
+
+**Request Body**:
+```json
+{
+  "query": "search terms",
+  "limit": 20,
+  "cursor": null
+}
+```
+
+**Responses**:
+```json
+{
+  "results": [
+    {
+      "id": 123,
+      "title": "Note Title",
+      "content_preview": "...matching text...",
+      "score": 0.85,
+      "tags": ["work"],
+      "created_at": "2026-03-18T10:00:00Z"
+    }
+  ],
+  "pagination": {
+    "has_next": false,
+    "total_count": 5
+  }
+}
+```
+
+**Responses**:
+- `200 OK`: Search completed
+- `400 Bad Request`: Invalid query parameters
+- `401 Unauthorized`: Invalid token
+
+---
+
+### API Tokens
+
+#### GET /api-tokens
+
+Lists all API tokens for the current user.
+
+**Headers**:
+- `Authorization: Bearer <token>`
+
+**Responses**:
+```json
+{
+  "tokens": [
+    {
+      "id": 1,
+      "name": "Production Token",
+      "last_used_at": "2026-03-18T09:00:00Z",
+      "created_at": "2026-03-17T10:00:00Z"
+    }
+  ]
+}
+```
+
+**Responses**:
+- `200 OK`: Success
+- `401 Unauthorized`: Invalid token
+
+---
+
+#### POST /api-tokens
+
+Creates a new API token.
+
+**Headers**:
+- `Authorization: Bearer <token>`
+- `Content-Type: application/json`
+
+**Request Body**:
+```json
+{
+  "name": "Token Name"
+}
+```
+
+**Responses**:
+```json
+{
+  "id": 1,
+  "name": "Token Name",
+  "token": "abc123..."  // SHA-256 hash (not the raw token!)
+}
+```
+
+**Note**: The raw token is only shown once. Store it securely.
+
+**Responses**:
+- `201 Created`: Token created
+- `401 Unauthorized`: Invalid token
+
+---
+
+#### DELETE /api-tokens/{id}
+
+Deletes an API token.
+
+**Path Parameters**:
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| id | integer | Token ID |
+
+**Headers**:
+- `Authorization: Bearer <token>`
+
+**Responses**:
+- `204 No Content`: Token deleted
+- `404 Not Found`: Token not found
+- `401 Unauthorized`: Invalid token
+
+---
+
+## Error Responses
+
+All endpoints return errors in the following format:
+
+```json
+{
+  "error": {
+    "code": "INVALID_TOKEN",
+    "message": "The provided authentication token is invalid or expired"
+  }
+}
+```
+
+### Error Codes
+
+| Code | HTTP Status | Description |
+|------|-------------|-------------|
+| INVALID_TOKEN | 401 | Authentication token is invalid or expired |
+| INSUFFICIENT_PERMISSIONS | 403 | User doesn't have permission to access resource |
+| NOT_FOUND | 404 | Resource not found |
+| VALIDATION_ERROR | 400 | Request body failed validation |
+| CONFLICT | 409 | Resource already exists (e.g., duplicate tag) |
+| RATE_LIMITED | 429 | Too many requests |
+| INTERNAL_ERROR | 500 | Server-side error |
+
+---
+
+## Rate Limiting
+
+- **Authentication endpoints**: 10 requests per minute
+- **Notes endpoints**: 60 requests per minute
+- **Search endpoints**: 30 requests per minute
+- **Attachment upload**: 5 uploads per minute (max 10MB each)
+
+Rate limit headers included in responses:
+```
+X-RateLimit-Limit: 60
+X-RateLimit-Remaining: 59
+X-RateLimit-Reset: 2026-03-18T10:01:00Z
+```
+
+---
+
+## Versioning
+
+API version is included in the URL path: `/api/v1/...`
+
+Future versions will use `/api/v2/`, `/api/v3/`, etc.
+
+Backward-incompatible changes require a new version number.
