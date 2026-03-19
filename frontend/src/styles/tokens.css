@@ -1,0 +1,274 @@
+/**
+ * Design Tokens for BubblesNotes
+ * 
+ * Centralized design system values for colors, typography, spacing, and animations.
+ * To change the theme, update the values in this file.
+ * 
+ * Usage: Import this file in your main CSS and reference variables with var(--token-name)
+ */
+
+:root {
+  /* ========================================
+     PRIMARY BRAND COLORS (Blue)
+     Main brand color used for primary actions, links, and key UI elements
+     ======================================== */
+  --primary-50: #eff6ff;
+  --primary-100: #dbeafe;
+  --primary-200: #bfdbfe;
+  --primary-300: #93c5fd;
+  --primary-400: #60a5fa;
+  --primary-500: #3b82f6;   /* Main - Primary buttons, active links */
+  --primary-600: #2563eb;   /* Button hover states */
+  --primary-700: #1d4ed8;   /* Active/pressed states */
+  --primary-800: #1e40af;   /* High emphasis text */
+  --primary-900: #1e3a8a;   /* Logo, headers */
+
+  /* ========================================
+     ACCENT COLORS
+     Used for special features, highlights, and visual variety
+     ======================================== */
+  
+  /* Purple - AI features, premium content */
+  --accent-purple-50: #f5f3ff;
+  --accent-purple-100: #ede9fe;
+  --accent-purple-200: #ddd6fe;
+  --accent-purple-300: #c4b5fd;
+  --accent-purple-400: #a78bfa;
+  --accent-purple-500: #8b5cf6;   /* AI/Enhancement features */
+  --accent-purple-600: #7c3aed;
+  --accent-purple-700: #6d28d9;
+  --accent-purple-800: #5b21b6;
+  --accent-purple-900: #4c1d95;
+
+  /* Teal - URL previews, external links */
+  --accent-teal-50: #f0fdfa;
+  --accent-teal-100: #ccfbf1;
+  --accent-teal-200: #99f6e4;
+  --accent-teal-300: #5eead4;
+  --accent-teal-400: #2dd4bf;
+  --accent-teal-500: #14b8a6;   /* External links/previews */
+  --accent-teal-600: #0d9488;
+  --accent-teal-700: #0f766e;
+  --accent-teal-800: #115e59;
+  --accent-teal-900: #134e4a;
+
+  /* Pink - Notifications, special badges */
+  --accent-pink-50: #fdf2f8;
+  --accent-pink-100: #fce7f3;
+  --accent-pink-200: #fbcfe8;
+  --accent-pink-300: #f9a8d4;
+  --accent-pink-400: #f472b6;
+  --accent-pink-500: #ec4899;   /* Notifications */
+  --accent-pink-600: #db2777;
+  --accent-pink-700: #be185d;
+  --accent-pink-800: #9d174d;
+  --accent-pink-900: #831843;
+
+  /* Amber - Highlights, featured content */
+  --accent-amber-50: #fffbeb;
+  --accent-amber-100: #fef3c7;
+  --accent-amber-200: #fde68a;
+  --accent-amber-300: #fcd34d;
+  --accent-amber-400: #fbbf24;
+  --accent-amber-500: #f59e0b;   /* Highlights */
+  --accent-amber-600: #d97706;
+  --accent-amber-700: #b45309;
+  --accent-amber-800: #92400e;
+  --accent-amber-900: #78350f;
+
+  /* ========================================
+     NEUTRAL/GRAYSCALE COLORS
+     Used for text, backgrounds, borders, and structural elements
+     ======================================== */
+  --neutral-50: #fafafa;    /* Page background */
+  --neutral-100: #f4f4f5;   /* Card backgrounds */
+  --neutral-200: #e4e4e7;   /* Input borders, dividers */
+  --neutral-300: #d4d4d8;   /* Dividers */
+  --neutral-400: #a1a1aa;   /* Placeholder text */
+  --neutral-500: #71717a;   /* Secondary text */
+  --neutral-600: #52525b;   /* Body text */
+  --neutral-700: #3f3f46;   /* Headings */
+  --neutral-800: #27272a;   /* High emphasis */
+  --neutral-900: #18181b;   /* Logo, icons */
+
+  /* ========================================
+     SEMANTIC/STATUS COLORS
+     Used for feedback messages, status indicators, and conditional styling
+     ======================================== */
+  --success-500: #10b981;
+  --success-600: #059669;
+  --success-bg: #ecfdf5;
+
+  --warning-500: #f59e0b;
+  --warning-600: #d97706;
+  --warning-bg: #fffbeb;
+
+  --error-500: #ef4444;
+  --error-600: #dc2626;
+  --error-bg: #fef2f2;
+
+  --info-500: #3b82f6;
+  --info-600: #2563eb;
+  --info-bg: #eff6ff;
+
+  /* ========================================
+     SPECIAL PURPOSE COLORS
+     Used for specific UI patterns and components
+     ======================================== */
+  --link-default: #3b82f6;
+  --link-hover: #2563eb;
+  --link-visited: #7c3aed;
+
+  --code-bg: #1e293b;
+  --code-text: #e2e8f0;
+  --code-accent: #60a5fa;
+
+  --selection-bg: rgba(59, 130, 246, 0.2);
+  --selection-text: #1e40af;
+
+  /* ========================================
+     TYPOGRAPHY
+     ======================================== */
+  
+  /* Font families */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+
+  /* Font sizes (rem) */
+  --text-xs: 0.75rem;     /* 12px - metadata, captions */
+  --text-sm: 0.875rem;    /* 14px - small text, buttons */
+  --text-base: 1rem;      /* 16px - body text */
+  --text-lg: 1.125rem;    /* 18px - large body, card titles */
+  --text-xl: 1.25rem;     /* 20px - section headings */
+  --text-2xl: 1.5rem;     /* 24px - page headings */
+  --text-3xl: 1.875rem;   /* 30px - hero headings */
+
+  /* Font weights */
+  --font-normal: 400;
+  --font-medium: 500;
+  --font-semibold: 600;
+  --font-bold: 700;
+
+  /* Line heights */
+  --leading-none: 1;
+  --leading-tight: 1.25;
+  --leading-snug: 1.375;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+
+  /* ========================================
+     SPACING (8px grid system)
+     ======================================== */
+  --space-0: 0;
+  --space-1: 0.25rem;   /* 4px */
+  --space-2: 0.5rem;    /* 8px */
+  --space-3: 0.75rem;   /* 12px */
+  --space-4: 1rem;      /* 16px */
+  --space-5: 1.25rem;   /* 20px */
+  --space-6: 1.5rem;    /* 24px */
+  --space-8: 2rem;      /* 32px */
+  --space-10: 2.5rem;   /* 40px */
+  --space-12: 3rem;     /* 48px */
+  --space-16: 4rem;     /* 64px */
+  --space-20: 5rem;     /* 80px */
+  --space-24: 6rem;     /* 96px */
+
+  /* ========================================
+     BORDER RADIUS
+     ======================================== */
+  --radius-xs: 0.25rem;   /* 4px */
+  --radius-sm: 0.375rem;  /* 6px */
+  --radius-md: 0.5rem;    /* 8px */
+  --radius-lg: 0.625rem;  /* 10px */
+  --radius-xl: 0.75rem;   /* 12px */
+  --radius-2xl: 1rem;     /* 16px */
+
+  /* ========================================
+     TRANSITIONS
+     ======================================== */
+  --transition-fast: 150ms;
+  --transition-normal: 250ms;
+  --transition-slow: 350ms;
+
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ========================================
+     BOX SHADOWS
+     ======================================== */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+  /* ========================================
+     RESPONSIVE BREAKPOINTS
+     ======================================== */
+  --breakpoint-sm: 640px;   /* Mobile landscape */
+  --breakpoint-md: 768px;   /* Tablet */
+  --breakpoint-lg: 1024px;  /* Desktop */
+  --breakpoint-xl: 1280px;  /* Large desktop */
+  --breakpoint-2xl: 1536px; /* Extra large desktop */
+
+  /* ========================================
+     Z-INDEX SCALE
+     ======================================== */
+  --z-dropdown: 1000;
+  --z-sticky: 1020;
+  --z-fixed: 1030;
+  --z-modal-backdrop: 1040;
+  --z-modal: 1050;
+  --z-popover: 1060;
+  --z-tooltip: 1070;
+}
+
+/* ========================================
+   DARK MODE OVERRIDES
+   Apply by setting data-theme='dark' on <html> element
+   ======================================== */
+[data-theme='dark'] {
+  /* Backgrounds */
+  --neutral-50: #0f172a;      /* Dark background */
+  --neutral-100: #1e293b;     /* Card backgrounds */
+  
+  /* Text - Lighter for dark mode */
+  --neutral-600: #cbd5e1;     /* Body text (lighter) */
+  --neutral-700: #e2e8f0;     /* Headings (lighter) */
+  --neutral-800: #f1f5f9;     /* High emphasis (white) */
+  
+  /* Borders */
+  --neutral-200: #334155;     /* Border color */
+  --neutral-300: #475569;     /* Divider color */
+  
+  /* Primary - Lighter for dark mode visibility */
+  --primary-500: #60a5fa;
+  --primary-600: #3b82f6;
+  
+  /* Code block adjustments */
+  --code-bg: #0f172a;
+  --code-text: #e2e8f0;
+}
+
+/* ========================================
+   CUSTOM THEMES EXAMPLES
+   Uncomment and modify to create custom themes
+   ======================================== */
+
+/* Forest Theme */
+/*
+[data-theme='forest'] {
+  --primary-500: #22c55e;
+  --primary-600: #16a34a;
+  --accent-purple-500: #84cc16;
+}
+*/
+
+/* Sunset Theme */
+/*
+[data-theme='sunset'] {
+  --primary-500: #f97316;
+  --primary-600: #ea580c;
+  --accent-pink-500: #fb7185;
+}
+*/

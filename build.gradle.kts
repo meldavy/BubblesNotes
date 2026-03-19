@@ -61,6 +61,7 @@ tasks.named("processResources") {
 dependencies {
     implementation("io.ktor:ktor-server-core:$ktor_version")
     implementation("io.ktor:ktor-server-auth:$ktor_version")
+    implementation("io.ktor:ktor-server-auth-jwt:$ktor_version")
     implementation("io.ktor:ktor-server-resources:$ktor_version")
     implementation("io.ktor:ktor-server-host-common:$ktor_version")
     implementation("io.ktor:ktor-server-status-pages:$ktor_version")
@@ -80,6 +81,9 @@ dependencies {
     // Flyway for database migrations (H2 support is bundled with flyway-core)
     implementation("org.flywaydb:flyway-core:10.17.1")
     implementation("com.h2database:h2:2.3.232")
+    // Google OAuth client
+    implementation("com.google.api-client:google-api-client:2.6.0")
+    implementation("com.google.oauth-client:google-oauth-client-jetty:1.35.0")
     testImplementation("io.ktor:ktor-server-test-host:$ktor_version")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version")
 }
