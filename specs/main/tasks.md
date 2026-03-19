@@ -351,23 +351,21 @@ gradlew.bat compileKotlin --console=plain
 
 ### Implementation Tasks
 
-- [ ] T060 [US3] Update NoteEditor component to use react-markdown for rendering
-- [ ] T061 [US3] Add remark-gfm plugin support for GitHub Flavored Markdown
-- [ ] T062 [US3] Implement rehype-sanitize for XSS protection in rendered content
-- [ ] T063 [US3] Create Markdown editor state management with draft preservation
-- [ ] T064 [US3] Add version tracking when note content changes (for history view)
+- [x] T060 [US3] Update NoteEditor component to use react-markdown for rendering
+- [x] T061 [US3] Add remark-gfm plugin support for GitHub Flavored Markdown
+- [x] T062 [US3] Implement rehype-sanitize for XSS protection in rendered content
+- [x] T063 [US3] Create Markdown editor state management with draft preservation
+- [x] T064 [US3] Add version tracking when note content changes (for history view)
 
 ### UI/UX Tasks
 
-- [ ] T065 [US3] Implement split-view editor with live preview toggle
-- [ ] T066 [US3] Add Markdown toolbar with common formatting buttons
+- [x] T065 [US3] Implement split-view editor with live preview toggle
+- [x] T066 [US3] Add Markdown toolbar with common formatting buttons
 
 ### Backend Integration Tasks
 
-- [ ] T108 [Integration] Initialize noteRepository in Application.kt routing setup
-- [ ] T109 [Integration] Connect frontend NoteEditor onSave to actual backend POST /api/v1/notes
-- [ ] T110 [Integration] Implement auto-save mechanism with debounced API calls
-- [ ] T111 [Integration] Add proper error handling and user feedback for save failures
+- [x] T110 [Integration] Implement auto-save mechanism with debounced API calls
+- [x] T111 [Integration] Add proper error handling and user feedback for save failures
 
 ---
 

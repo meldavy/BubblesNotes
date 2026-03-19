@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { NoteEditor } from '../components/NoteEditor';
+import { MarkdownPreview } from '../components/MarkdownPreview';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Header } from '../components/Header';
@@ -285,6 +286,7 @@ export const Dashboard: React.FC = () => {
                         isEditing={editingNoteId !== null}
                         onCancel={editingNoteId !== null ? handleCancelEdit : undefined}
                         isSaving={isSaving}
+                        noteId={editingNoteId}
                     />
                 </section>
 
@@ -366,9 +368,11 @@ export const Dashboard: React.FC = () => {
                                                     </span>
                                                 )}
                                             </div>
-                                            <p className="text-sm text-neutral-600 leading-relaxed line-clamp-3">
-                                                {note.content}
-                                            </p>
+                                            <MarkdownPreview
+                                                content={note.content}
+                                                maxLines={3}
+                                                className="text-sm"
+                                            />
                                             <footer className="mt-4 pt-3 border-t border-neutral-200 flex items-center justify-between">
                                                 <time className="text-xs text-neutral-400">
                                                     {new Date(note.updatedAt).toLocaleDateString('en-US', {
