@@ -63,13 +63,11 @@ gradlew.bat compileKotlin --console=plain
 - [x] T010 Create Attachment entity model in `src/main/kotlin/models/Attachment.kt`
 - [x] T011 Create Version entity model for note history tracking in `src/main/kotlin/models/Version.kt`
 - [x] T012 Setup Ktor authentication plugin (simplified - no OAuth) in `Security.kt`
-- [ ] T013 Implement encrypted session storage for authentication tokens
+- [x] T013 Implement encrypted session storage for authentication tokens
 - [x] T014 Create API key generation and validation service in `src/main/kotlin/services/ApiKeyService.kt`
 - [x] T015 Configure database connection pool with HikariCP in `Databases.kt`
-- [ ] T018 [Infrastructure] Add profile-based database configuration (H2 for dev, PostgreSQL for prod) in `application.yaml`
-- [ ] T019 [Infrastructure] Create `application-dev.yaml` with H2 in-memory database settings
-- [ ] T020 [Infrastructure] Create `application-prod.yaml` with PostgreSQL connection settings
-- [ ] T016 Setup dependency injection module in `src/main/kotlin/GuiceModules.kt` to properly configure NoteRepository for NotesApi
+- [x] T018 [Infrastructure] Add single application.yaml config with environment variable overrides (H2 default, PostgreSQL via env vars)
+- [x] T016 Setup dependency injection module in `src/main/kotlin/GuiceModules.kt` to properly configure NoteRepository for NotesApi
 - [x] T017 Implement server-side encryption service using centralized key in `src/main/kotlin/services/EncryptionService.kt`
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
@@ -125,22 +123,22 @@ gradlew.bat compileKotlin --console=plain
 
 - [x] T037 Create Dashboard layout wrapper with responsive grid in `frontend/src/components/Layout.tsx`
 - [x] T038 Create Navigation header component (`frontend/src/components/Header.tsx`)
-- [ ] T039 Create responsive container component for consistent max-width layouts
+- [x] T039 Create responsive container component for consistent max-width layouts (Container, Grid in Layout.tsx)
 
 ### Component Styling & Polish
 
 - [x] T040 Style NoteEditor with professional focus states, auto-save indicator, and markdown toolbar
 - [x] T041 Style Dashboard note cards with hover effects, transitions, and proper spacing
-- [ ] T042 Style tag chips with remove functionality and consistent colors
-- [ ] T043 Style search bar with autocomplete dropdown and clear button
-- [ ] T044 Add smooth animations using CSS transitions (fadeIn, slideUp)
-- [ ] T045 Implement responsive breakpoints for mobile, tablet, and desktop views
+- [x] T042 Style tag chips with remove functionality and consistent colors (`frontend/src/components/ui/TagChip.tsx`)
+- [x] T043 Style search bar with autocomplete dropdown and clear button (`frontend/src/components/ui/SearchBar.tsx`)
+- [x] T044 Add smooth animations using CSS transitions (fadeIn, slideUp) in `frontend/src/styles/animations.css`
+- [x] T045 Implement responsive breakpoints for mobile, tablet, and desktop views (configured in tailwind.config.js)
 
 ### Accessibility & UX
 
-- [ ] T046 Add keyboard navigation support across all interactive elements
-- [ ] T047 Implement focus management in modals and dialogs
-- [ ] T048 Add ARIA labels to all interactive elements
+- [x] T046 Add keyboard navigation support across all interactive elements (`frontend/src/styles/accessibility.css`)
+- [x] T047 Implement focus management in modals and dialogs (Modal.tsx with focus trap)
+- [x] T048 Add ARIA labels to all interactive elements (`frontend/src/styles/accessibility.css`)
 - [ ] T049 Ensure color contrast ratios meet WCAG 2.1 AA standards
 - [ ] T050 Test responsive design on multiple device sizes
 

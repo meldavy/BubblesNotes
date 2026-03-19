@@ -4,6 +4,7 @@ import com.mel.bubblenotes.models.Note
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import kotlinx.coroutines.runBlocking
+import org.flywaydb.core.Flyway
 import java.sql.Connection
 import java.util.UUID
 import kotlin.test.Test
@@ -18,19 +19,32 @@ class NoteRepositoryTest {
     private lateinit var noteRepository: NoteRepository
 
     fun setup() {
-        // Setup H2 in-memory database
+        // Setup H2 in-memory database with PostgreSQL compatibility mode
         val hikariConfig = HikariConfig().apply {
-            jdbcUrl = "jdbc:h2:mem:test;DB_CLOSE_DELAY=-1"
+            jdbcUrl = "jdbc:h2:mem:test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL"
             username = "sa"
             password = ""
         }
         dataSource = HikariDataSource(hikariConfig)
         
-        // Create schema
-        val connection = dataSource.connection
-        createSchema(connection)
+        // Run Flyway migrations to create schema (same as production)
+        try {
+            val flyway = Flyway.configure()
+                .dataSource(dataSource)
+                .locations("classpath:db/migration")
+                .load()
+            flyway.migrate()
+            
+            // Disable referential integrity for testing - allows creating notes with arbitrary user IDs
+            dataSource.connection.createStatement().use { stmt ->
+                stmt.execute("SET REFERENTIAL_INTEGRITY FALSE")
+            }
+        } catch (e: Exception) {
+            dataSource.close()
+            throw e
+        }
         
-        noteRepository = NoteRepository(connection)
+        noteRepository = NoteRepository(dataSource.connection)
     }
 
     fun teardown() {
@@ -246,83 +260,6 @@ class NoteRepositoryTest {
             assertEquals(null, foundNote.title)
         } finally {
             teardown()
-        }
-    }
-
-    // Helper function to create schema in H2 database
-    private fun createSchema(connection: Connection) {
-        connection.createStatement().use { stmt ->
-            stmt.execute("""
-                CREATE TABLE IF NOT EXISTS notes (
-                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                    user_id UUID NOT NULL,
-                    title VARCHAR(255),
-                    content TEXT NOT NULL,
-                    is_published BOOLEAN DEFAULT TRUE,
-                    ai_title VARCHAR(255),
-                    ai_summary TEXT,
-                    ai_tags VARCHAR(4096),
-                    last_version_id BIGINT,
-                    created_at BIGINT NOT NULL,
-                    updated_at BIGINT NOT NULL
-                )
-            """.trimIndent())
-
-            stmt.execute("""
-                CREATE TABLE IF NOT EXISTS tags (
-                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                    user_id UUID NOT NULL,
-                    name VARCHAR(100) NOT NULL,
-                    created_at BIGINT NOT NULL
-                )
-            """.trimIndent())
-
-            stmt.execute("""
-                CREATE TABLE IF NOT EXISTS attachments (
-                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                    note_id BIGINT NOT NULL,
-                    user_id UUID NOT NULL,
-                    file_name VARCHAR(255) NOT NULL,
-                    content_type VARCHAR(100) NOT NULL,
-                    file_size BIGINT NOT NULL,
-                    storage_path VARCHAR(500),
-                    encrypted_data BLOB,
-                    created_at BIGINT NOT NULL
-                )
-            """.trimIndent())
-
-            stmt.execute("""
-                CREATE TABLE IF NOT EXISTS versions (
-                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                    note_id BIGINT NOT NULL,
-                    user_id UUID NOT NULL,
-                    title VARCHAR(255),
-                    content TEXT NOT NULL,
-                    created_at BIGINT NOT NULL
-                )
-            """.trimIndent())
-
-            stmt.execute("""
-                CREATE TABLE IF NOT EXISTS users (
-                    id UUID PRIMARY KEY,
-                    email VARCHAR(255) UNIQUE NOT NULL,
-                    name VARCHAR(255),
-                    avatar_url VARCHAR(500),
-                    created_at BIGINT NOT NULL,
-                    updated_at BIGINT NOT NULL
-                )
-            """.trimIndent())
-
-            stmt.execute("""
-                CREATE TABLE IF NOT EXISTS api_keys (
-                    id UUID PRIMARY KEY,
-                    user_id UUID NOT NULL,
-                    key_hash VARCHAR(64) NOT NULL UNIQUE,
-                    name VARCHAR(100),
-                    created_at BIGINT NOT NULL,
-                    expires_at BIGINT
-                )
-            """.trimIndent())
         }
     }
 }

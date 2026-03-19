@@ -1,5 +1,9 @@
 /* Import design tokens first */
 @import './styles/tokens.css';
+/* Import animations */
+@import './styles/animations.css';
+/* Import accessibility styles */
+@import './styles/accessibility.css';
 
 @tailwind base;
 @tailwind components;

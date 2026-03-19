@@ -29,7 +29,15 @@ fun Application.configureRouting() {
     install(Resources)
     install(StatusPages) {
         exception<Throwable> { call, cause ->
-            call.respondText(text = "500: $cause", status = HttpStatusCode.InternalServerError)
+            // Log the full exception details internally for debugging
+            call.application.log.error("Internal server error: ${cause.message}", cause)
+            
+            // Return generic error message to clients without exposing internal details
+            call.respondText(
+                text = """{"error": "An internal error occurred", "status": 500}""",
+                status = HttpStatusCode.InternalServerError,
+                contentType = ContentType.Application.Json
+            )
         }
     }
     

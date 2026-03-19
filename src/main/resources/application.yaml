@@ -3,8 +3,18 @@ ktor:
     modules:
       - com.mel.bubblenotes.ApplicationKt.module
   deployment:
-    port: 8080
-postgres:
-  url: "jdbc:postgresql://localhost/default"
-  user: username
-  password: password
+    port: ${PORT:8080}
+
+# Database configuration (defaults to H2 in-memory for local development)
+# Override via environment variables: DB_URL, DB_USER, DB_PASSWORD
+db:
+  url: ${DB_URL:jdbc:h2:mem:bubblesnotes;DB_CLOSE_DELAY=-1;MODE=PostgreSQL}
+  user: ${DB_USER:sa}
+  password: ${DB_PASSWORD:}
+  pool-size: ${DB_POOL_SIZE:10}
+  min-idle: ${DB_MIN_IDLE:2}
+
+# Encryption settings (defaults for development, MUST be set in production)
+encryption:
+  key: ${ENCRYPTION_KEY:dev-encryption-key-do-not-use-in-production}
+  session-key: ${SESSION_ENCRYPTION_KEY:dev-session-key-do-not-use-in-production}

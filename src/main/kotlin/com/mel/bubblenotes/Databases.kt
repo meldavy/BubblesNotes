@@ -4,6 +4,7 @@ import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import io.ktor.server.application.*
 import io.ktor.util.*
+import org.flywaydb.core.Flyway
 import java.sql.Connection
 
 class DatabaseService(private val dataSource: HikariDataSource) {
@@ -15,7 +16,7 @@ fun Application.configureDatabases() {
     val dbUrl = try {
         environment.config.property("db.url").getString()
     } catch (e: Exception) {
-        System.getProperty("db.url") ?: System.getenv("DB_URL") ?: "jdbc:h2:mem:test;DB_CLOSE_DELAY=-1"
+        System.getProperty("db.url") ?: System.getenv("DB_URL") ?: "jdbc:h2:mem:bubblesnotes;DB_CLOSE_DELAY=-1;MODE=PostgreSQL"
     }
     val dbUser = try {
         environment.config.property("db.user").getString()
@@ -37,6 +38,20 @@ fun Application.configureDatabases() {
     }
     
     val dataSource = HikariDataSource(hikariConfig)
+    
+    // Run Flyway migrations
+    try {
+        val flyway = Flyway.configure()
+            .dataSource(dataSource)
+            .locations("classpath:db/migration")
+            .load()
+        flyway.migrate()
+        environment.log.info("Database migrations completed successfully")
+    } catch (e: Exception) {
+        environment.log.error("Failed to run database migrations: ${e.message}")
+        throw e
+    }
+    
     val dbService = DatabaseService(dataSource)
     
     // Store database service in application attributes for use in API routes

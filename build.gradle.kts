@@ -75,6 +75,11 @@ dependencies {
     implementation("io.ktor:ktor-server-netty:$ktor_version")
     implementation("ch.qos.logback:logback-classic:$logback_version")
     implementation("io.ktor:ktor-server-config-yaml:$ktor_version")
+    // Guice dependency injection
+    implementation("com.google.inject:guice:5.1.0")
+    // Flyway for database migrations (H2 support is bundled with flyway-core)
+    implementation("org.flywaydb:flyway-core:10.17.1")
+    implementation("com.h2database:h2:2.3.232")
     testImplementation("io.ktor:ktor-server-test-host:$ktor_version")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version")
 }
