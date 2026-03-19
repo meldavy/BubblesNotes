@@ -4,16 +4,15 @@ import com.mel.bubblenotes.models.Attachment
 import java.sql.Connection
 import java.util.UUID
 
-class AttachmentRepository(private val connection: Connection) {
+open class AttachmentRepository(private val connection: Connection) {
     
     fun create(attachment: Attachment): Long {
         val sql = """
             INSERT INTO attachments (note_id, user_id, file_name, content_type, file_size, storage_path, encrypted_data, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            RETURNING id
         """.trimIndent()
         
-        connection.prepareStatement(sql).use { stmt ->
+        connection.prepareStatement(sql, java.sql.Statement.RETURN_GENERATED_KEYS).use { stmt ->
             stmt.setLong(1, attachment.noteId)
             stmt.setObject(2, attachment.userId)
             stmt.setString(3, attachment.fileName)
@@ -27,9 +26,10 @@ class AttachmentRepository(private val connection: Connection) {
             }
             stmt.setLong(8, attachment.createdAt)
             
-            val rs = stmt.executeQuery()
+            stmt.executeUpdate()
+            val rs = stmt.generatedKeys
             if (rs.next()) {
-                return rs.getLong("id")
+                return rs.getLong(1)
             }
             throw Exception("Failed to create attachment")
         }

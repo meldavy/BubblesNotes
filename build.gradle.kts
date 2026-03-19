@@ -21,6 +21,43 @@ kotlin {
     jvmToolchain(17)
 }
 
+// Frontend build tasks - runs npm commands directly
+tasks.register<Exec>("installFrontend") {
+    description = "Install frontend dependencies"
+    group = "frontend"
+    workingDir = File(project.projectDir, "frontend")
+    // Use cmd.exe to run npm on Windows
+    commandLine("cmd", "/c", "npm", "install")
+}
+
+tasks.register<Exec>("buildFrontend") {
+    description = "Build React frontend"
+    group = "frontend"
+    dependsOn("installFrontend")
+    workingDir = File(project.projectDir, "frontend")
+    commandLine("cmd", "/c", "npm", "run", "build")
+}
+
+// Hook buildFrontend into the main build task
+tasks.named("build") {
+    dependsOn("buildFrontend")
+}
+
+// Copy built frontend to static resources for Ktor
+// This runs after buildFrontend and copies to src/main/resources/static
+tasks.register<Copy>("copyFrontendToStatic") {
+    description = "Copy built React frontend to static resources"
+    group = "frontend"
+    dependsOn("buildFrontend")
+    from(File(project.projectDir, "frontend/build"))
+    into(File(project.projectDir, "src/main/resources/static"))
+}
+
+// Hook copyFrontendToStatic before processResources so it gets included
+tasks.named("processResources") {
+    dependsOn("copyFrontendToStatic")
+}
+
 dependencies {
     implementation("io.ktor:ktor-server-core:$ktor_version")
     implementation("io.ktor:ktor-server-auth:$ktor_version")

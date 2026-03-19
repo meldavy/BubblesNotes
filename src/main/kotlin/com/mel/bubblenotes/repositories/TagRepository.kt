@@ -4,23 +4,23 @@ import com.mel.bubblenotes.models.Tag
 import java.sql.Connection
 import java.util.UUID
 
-class TagRepository(private val connection: Connection) {
+open class TagRepository(private val connection: Connection) {
     
     fun create(tag: Tag): Long {
         val sql = """
             INSERT INTO tags (user_id, name, created_at)
             VALUES (?, ?, ?)
-            RETURNING id
         """.trimIndent()
         
-        connection.prepareStatement(sql).use { stmt ->
+        connection.prepareStatement(sql, java.sql.Statement.RETURN_GENERATED_KEYS).use { stmt ->
             stmt.setObject(1, tag.userId)
             stmt.setString(2, tag.name)
             stmt.setLong(3, tag.createdAt)
             
-            val rs = stmt.executeQuery()
+            stmt.executeUpdate()
+            val rs = stmt.generatedKeys
             if (rs.next()) {
-                return rs.getLong("id")
+                return rs.getLong(1)
             }
             throw Exception("Failed to create tag")
         }

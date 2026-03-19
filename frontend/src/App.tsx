@@ -1,12 +1,8 @@
 import React from 'react'
+import { Dashboard } from './pages/Dashboard'
 
 function App() {
-  return (
-    <div className="App">
-      <h1>Notes App with AI Integration</h1>
-      <p>Welcome to the Notes App! Start by creating your first note.</p>
-    </div>
-  )
+  return <Dashboard />
 }
 
 export default App

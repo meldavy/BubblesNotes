@@ -34,20 +34,15 @@ fun Application.configureRouting() {
     }
     
     routing {
-        get("/") {
-            call.respondText("Hello World!")
-        }
+        // Notes API - must be before static resources to avoid being served as files
+        notesApi()
         
         get<Articles> { article ->
-            // Get all articles ...
             call.respond("List of articles sorted starting from ${article.sort}")
         }
         
-        // Notes API
-        notesApi()
-        
-        // Static plugin. Try to access `/static/index.html`
-        staticResources("/static", "static")
+        // Serve React frontend from root
+        staticResources("/", "static")
     }
 }
 

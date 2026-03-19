@@ -7,7 +7,7 @@ description: "Task list for Notes App with AI Integration feature"
 **Input**: Design documents from `/specs/notes-app-ai-integration/`
 **Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/
 
-**Tests**: Tests are OPTIONAL - only include them if explicitly requested in the feature specification. This implementation does not include test tasks by default.
+**Tests**: Tests are MUST REQUIRED. Aim for 100% coverage, including negative scenarios and edge cases. Additionally, create integration test-style unit tests as well that verifies functionality across components.
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
 
@@ -62,7 +62,7 @@ gradlew.bat compileKotlin --console=plain
 - [x] T009 Create Tag entity and join table models in `src/main/kotlin/models/Tag.kt`
 - [x] T010 Create Attachment entity model in `src/main/kotlin/models/Attachment.kt`
 - [x] T011 Create Version entity model for note history tracking in `src/main/kotlin/models/Version.kt`
-- [ ] T012 Setup Ktor authentication plugin (simplified - no OAuth) in `Security.kt`
+- [x] T012 Setup Ktor authentication plugin (simplified - no OAuth) in `Security.kt`
 - [ ] T013 Implement encrypted session storage for authentication tokens
 - [x] T014 Create API key generation and validation service in `src/main/kotlin/services/ApiKeyService.kt`
 - [x] T015 Configure database connection pool with HikariCP in `Databases.kt`
@@ -81,21 +81,69 @@ gradlew.bat compileKotlin --console=plain
 
 ### Implementation Tasks
 
-- [ ] T018 [US1] Add Markdown preview rendering using react-markdown in `NoteEditor.tsx`
-- [ ] T019 [US1] Create note creation API endpoint POST `/api/v1/notes` in `src/main/kotlin/api/NotesApi.kt`
-- [ ] T020 [US1] Implement note creation service in `src/main/kotlin/services/note_service.kt`
-- [ ] T021 [US1] Add database INSERT query for new notes with auto-generated ID
-- [ ] T022 [US1] Create React dashboard layout component in `frontend/src/pages/Dashboard.tsx`
-- [ ] T023 [US1] Implement sticky note editor at top of dashboard grid in `Dashboard.tsx`
+- [x] T018 [US1] Add Markdown preview rendering using react-markdown in `NoteEditor.tsx`
+- [x] T019 [US1] Create note creation API endpoint POST `/api/v1/notes` in `src/main/kotlin/api/NotesApi.kt`
+- [x] T020 [US1] Implement note creation service in `src/main/kotlin/services/note_service.kt`
+- [x] T021 [US1] Add database INSERT query for new notes with auto-generated ID
+- [x] T022 [US1] Create React dashboard layout component in `frontend/src/pages/Dashboard.tsx`
+- [x] T023 [US1] Implement sticky note editor at top of dashboard grid in `Dashboard.tsx`
 
 ### UI/UX Tasks
 
-- [ ] T024 [US1] Add CSS styling for note editor with focus states and auto-save indicator
-- [ ] T025 [US1] Implement keyboard shortcuts: Ctrl+S to save, Enter to finish editing
+- [x] T024 [US1] Add CSS styling for note editor with focus states and auto-save indicator
+- [x] T025 [US1] Implement keyboard shortcuts: Ctrl+S to save, Enter to finish editing
 
 ---
 
-## Phase 4: User Story 2 - Google OAuth Authentication (Priority: P1)
+## Phase 4: UI Design & Component Library (Priority: P0) 🎨
+
+**Purpose**: Establish professional visual design system and reusable component library before implementing complex user stories
+
+**Goal**: Create a polished, consistent UI with proper styling, animations, and accessibility across all components
+
+### Design System Setup
+
+- [ ] T026 Configure Tailwind CSS with custom theme colors and typography in `tailwind.config.js`
+- [ ] T027 Create design tokens file (`frontend/src/styles/tokens.css`) with color palette
+- [ ] T028 Set up global styles and CSS variables in `index.css`
+- [ ] T029 Install and configure @headlessui/react for accessible components
+- [ ] T030 Install @heroicons/react for consistent iconography
+
+### Core UI Components
+
+- [ ] T031 Create Button component (`frontend/src/components/ui/Button.tsx`) with variants (primary, secondary, ghost, danger)
+- [ ] T032 Create Input component (`frontend/src/components/ui/Input.tsx`) with validation states
+- [ ] T033 Create Card component (`frontend/src/components/ui/Card.tsx`) with hover effects
+- [ ] T034 Create Modal/Dialog component (`frontend/src/components/ui/Modal.tsx`) with animations
+- [ ] T035 Create Loading components (`frontend/src/components/ui/Loading.tsx`) - spinner and skeleton loaders
+- [ ] T036 Create Toast notification system (`frontend/src/components/ui/Toast.tsx`)
+
+### Layout Components
+
+- [ ] T037 Create Dashboard layout wrapper with responsive grid in `frontend/src/components/Layout.tsx`
+- [ ] T038 Create Navigation header component (`frontend/src/components/Header.tsx`)
+- [ ] T039 Create responsive container component for consistent max-width layouts
+
+### Component Styling & Polish
+
+- [ ] T040 Style NoteEditor with professional focus states, auto-save indicator, and markdown toolbar
+- [ ] T041 Style Dashboard note cards with hover effects, transitions, and proper spacing
+- [ ] T042 Style tag chips with remove functionality and consistent colors
+- [ ] T043 Style search bar with autocomplete dropdown and clear button
+- [ ] T044 Add smooth animations using CSS transitions (fadeIn, slideUp)
+- [ ] T045 Implement responsive breakpoints for mobile, tablet, and desktop views
+
+### Accessibility & UX
+
+- [ ] T046 Add keyboard navigation support across all interactive elements
+- [ ] T047 Implement focus management in modals and dialogs
+- [ ] T048 Add ARIA labels to all interactive elements
+- [ ] T049 Ensure color contrast ratios meet WCAG 2.1 AA standards
+- [ ] T050 Test responsive design on multiple device sizes
+
+---
+
+## Phase 5: User Story 2 - Google OAuth Authentication (Priority: P1)
 
 **Goal**: Enable user authentication via Google account for secure data isolation
 
@@ -119,7 +167,7 @@ gradlew.bat compileKotlin --console=plain
 
 ---
 
-## Phase 5: User Story 3 - Markdown Note Editing (Priority: P2)
+## Phase 6: User Story 3 - Markdown Note Editing (Priority: P2)
 
 **Goal**: Support Markdown formatting in note editing with real-time preview
 
@@ -140,7 +188,7 @@ gradlew.bat compileKotlin --console=plain
 
 ---
 
-## Phase 6: User Story 4 - URL Preview Generation (Priority: P2)
+## Phase 7: User Story 4 - URL Preview Generation (Priority: P2)
 
 **Goal**: Automatically generate preview cards for URLs in note content
 
@@ -163,7 +211,7 @@ gradlew.bat compileKotlin --console=plain
 
 ---
 
-## Phase 7: User Story 5 - File Attachments (Priority: P2)
+## Phase 8: User Story 5 - File Attachments (Priority: P2)
 
 **Goal**: Allow attaching files to notes with server-side encryption during upload/download
 
@@ -186,7 +234,7 @@ gradlew.bat compileKotlin --console=plain
 
 ---
 
-## Phase 8: User Story 6 - Tagging System (Priority: P3)
+## Phase 9: User Story 6 - Tagging System (Priority: P3)
 
 **Goal**: Support adding, displaying, and filtering by tags on notes
 
@@ -209,7 +257,7 @@ gradlew.bat compileKotlin --console=plain
 
 ---
 
-## Phase 9: User Story 7 - Content Search (Priority: P3)
+## Phase 10: User Story 7 - Content Search (Priority: P3)
 
 **Goal**: Enable search across note content, tags, and attachment filenames
 
@@ -231,7 +279,7 @@ gradlew.bat compileKotlin --console=plain
 
 ---
 
-## Phase 10: User Story 8 - AI-Powered Note Enhancement (Priority: P4)
+## Phase 11: User Story 8 - AI-Powered Note Enhancement (Priority: P4)
 
 **Goal**: Automatically generate summaries, titles, and tag suggestions using AI
 
@@ -253,7 +301,7 @@ gradlew.bat compileKotlin --console=plain
 
 ---
 
-## Phase 11: User Story 9 - Infinite Scroll with Lazy Loading (Priority: P4)
+## Phase 12: User Story 9 - Infinite Scroll with Lazy Loading (Priority: P4)
 
 **Goal**: Load notes progressively as user scrolls for responsive UI
 
@@ -274,7 +322,7 @@ gradlew.bat compileKotlin --console=plain
 
 ---
 
-## Phase 12: User Story 10 - Programmatic API Access (Priority: P5)
+## Phase 13: User Story 10 - Programmatic API Access (Priority: P5)
 
 **Goal**: Provide REST APIs for programmatic note access via API key
 
@@ -295,7 +343,7 @@ gradlew.bat compileKotlin --console=plain
 
 ---
 
-## Phase 13: Polish & Cross-Cutting Concerns
+## Phase 14: Polish & Cross-Cutting Concerns
 
 **Purpose**: Final polish and non-functional requirements
 
@@ -323,16 +371,17 @@ gradlew.bat compileKotlin --console=plain
 ```
 Phase 1 (Setup) ──┐
                   ├→ Phase 2 (Foundational) ──┬→ Phase 3 (US1: Quick Note Creation)
-                  │                           ├→ Phase 4 (US2: OAuth Auth)
-                  │                           ├→ Phase 5 (US3: Markdown Editing)
-                  │                           ├→ Phase 6 (US4: URL Preview)
-                  │                           ├→ Phase 7 (US5: File Attachments)
-                  │                           ├→ Phase 8 (US6: Tagging System)
-                  │                           ├→ Phase 9 (US7: Content Search)
-                  │                           ├→ Phase 10 (US8: AI Enhancement)
-                  │                           ├→ Phase 11 (US9: Infinite Scroll)
-                  │                           └→ Phase 12 (US10: API Access)
-                  └→ Phase 13 (Polish & Cross-Cutting)
+                  │                           ├→ Phase 4 (UI Design & Component Library)
+                  │                           ├→ Phase 5 (US2: OAuth Auth)
+                  │                           ├→ Phase 6 (US3: Markdown Editing)
+                  │                           ├→ Phase 7 (US4: URL Preview)
+                  │                           ├→ Phase 8 (US5: File Attachments)
+                  │                           ├→ Phase 9 (US6: Tagging System)
+                  │                           ├→ Phase 10 (US7: Content Search)
+                  │                           ├→ Phase 11 (US8: AI Enhancement)
+                  │                           ├→ Phase 12 (US9: Infinite Scroll)
+                  │                           └→ Phase 13 (US10: API Access)
+                  └→ Phase 14 (Polish & Cross-Cutting)
 ```
 
 ## Parallel Execution Examples
@@ -367,9 +416,10 @@ After MVP, add user stories in priority order:
 
 ## Summary
 
-- **Total Tasks**: 107
+- **Total Tasks**: 132
 - **Setup Phase**: 5 tasks
 - **Foundational Phase**: 12 tasks (added Guice DI and server-side encryption)
+- **UI Design Phase**: 25 tasks (T026-T050: design system, components, styling, accessibility)
 - **User Story Phases**: 84 tasks (P1: 10, P2: 36, P3: 20, P4: 17, P5: 9)
 - **Polish Phase**: 7 tasks (added build system integration)
 

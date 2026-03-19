@@ -5,16 +5,15 @@ import java.sql.Connection
 import java.util.UUID
 import java.util.*
 
-class NoteRepository(private val connection: Connection) {
+open class NoteRepository(private val connection: Connection) {
     
     fun create(note: Note): Long {
         val sql = """
             INSERT INTO notes (user_id, title, content, is_published, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?)
-            RETURNING id
         """.trimIndent()
         
-        connection.prepareStatement(sql).use { stmt ->
+        connection.prepareStatement(sql, java.sql.Statement.RETURN_GENERATED_KEYS).use { stmt ->
             stmt.setObject(1, note.userId)
             stmt.setString(2, note.title)
             stmt.setString(3, note.content)
@@ -22,9 +21,10 @@ class NoteRepository(private val connection: Connection) {
             stmt.setLong(5, note.createdAt)
             stmt.setLong(6, note.updatedAt)
             
-            val rs = stmt.executeQuery()
+            stmt.executeUpdate()
+            val rs = stmt.generatedKeys
             if (rs.next()) {
-                return rs.getLong("id")
+                return rs.getLong(1)
             }
             throw Exception("Failed to create note")
         }
