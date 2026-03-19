@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import ReactMarkdown from 'react-markdown';
 
 interface NoteEditorProps {
     value: string;
@@ -69,26 +68,73 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
         setShowPreview(!showPreview);
     };
 
+    // Markdown toolbar buttons
+    const toolbarButtons = [
+        { icon: 'B', action: () => insertMarkdown('**', '**'), label: 'Bold' },
+        { icon: 'I', action: () => insertMarkdown('*', '*'), label: 'Italic' },
+        { icon: '#', action: () => insertMarkdown('\n# ', ''), label: 'Heading' },
+        { icon: '-', action: () => insertMarkdown('\n- ', ''), label: 'List' },
+        { icon: '"', action: () => insertMarkdown('\n> ', ''), label: 'Quote' },
+        { icon: '`', action: () => insertMarkdown('`', '`'), label: 'Code' },
+    ];
+
+    const insertMarkdown = (before: string, after: string) => {
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const text = value;
+        const selectedText = text.substring(start, end);
+        
+        const newText = text.substring(0, start) + before + selectedText + after + text.substring(end);
+        onChange(newText);
+        
+        // Restore focus and set cursor position
+        setTimeout(() => {
+            textarea.focus();
+            textarea.setSelectionRange(start + before.length, end + before.length);
+        }, 0);
+    };
+
     return (
-        <div className="w-full">
+        <div className="w-full bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden transition-all duration-normal hover:shadow-md">
             {/* Editor Header */}
-            <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-gray-500">Quick Note</span>
-                <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-200 bg-neutral-50">
+                <div className="flex items-center space-x-2">
+                    <svg className="w-5 h-5 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    <span className="text-sm font-medium text-neutral-700">Quick Note</span>
+                </div>
+                
+                <div className="flex items-center space-x-3">
                     {/* Auto-save indicator */}
                     {autoSaveStatus === 'saving' && (
-                        <span className="text-xs text-blue-500 animate-pulse">Saving...</span>
+                        <div className="flex items-center space-x-1.5">
+                            <svg className="w-4 h-4 text-primary-500 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            </svg>
+                            <span className="text-xs text-primary-600 font-medium">Saving...</span>
+                        </div>
                     )}
                     {autoSaveStatus === 'saved' && value && (
-                        <span className="text-xs text-green-500">Saved</span>
+                        <div className="flex items-center space-x-1.5">
+                            <svg className="w-4 h-4 text-success-500" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                            <span className="text-xs text-success-600 font-medium">Saved</span>
+                        </div>
                     )}
+                    
                     {/* Preview toggle button */}
                     <button
                         onClick={togglePreview}
-                        className={`px-3 py-1 text-sm rounded transition-colors ${
+                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-fast ${
                             showPreview 
-                                ? 'bg-blue-500 text-white' 
-                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                ? 'bg-primary-500 text-white shadow-sm' 
+                                : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200'
                         }`}
                     >
                         {showPreview ? 'Edit' : 'Preview'}
@@ -96,15 +142,31 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
                 </div>
             </div>
 
+            {/* Markdown Toolbar (only in edit mode) */}
+            {!showPreview && (
+                <div className="flex items-center space-x-1 px-4 py-2 border-b border-neutral-200 bg-white">
+                    {toolbarButtons.map((btn, index) => (
+                        <button
+                            key={index}
+                            onClick={btn.action}
+                            title={btn.label}
+                            className="p-1.5 text-sm text-neutral-600 hover:bg-neutral-100 hover:text-neutral-800 rounded transition-colors duration-fast"
+                        >
+                            {btn.icon}
+                        </button>
+                    ))}
+                </div>
+            )}
+
             {/* Editor or Preview */}
             <div className="relative">
                 {!showPreview ? (
                     <textarea
                         ref={textareaRef}
-                        className={`w-full h-40 p-4 border rounded-lg resize-none transition-all ${
+                        className={`w-full h-40 p-4 resize-none transition-all duration-fast outline-none ${
                             isFocused 
-                                ? 'border-blue-500 ring-2 ring-blue-200' 
-                                : 'border-gray-300 hover:border-gray-400'
+                                ? 'border-primary-500 ring-2 ring-primary-100' 
+                                : 'border-neutral-200 hover:border-neutral-300'
                         } bg-white`}
                         value={value}
                         onChange={(e) => {
@@ -116,22 +178,24 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
                         placeholder={placeholder}
                     />
                 ) : (
-                    <div className="w-full h-40 p-4 border border-gray-300 rounded-lg bg-white overflow-auto">
+                    <div className="w-full h-40 p-4 border border-neutral-200 bg-white overflow-auto prose prose-sm max-w-none">
                         {value ? (
-                            <ReactMarkdown className="prose prose-sm max-w-none">
-                                {value}
-                            </ReactMarkdown>
+                            <div className="prose prose-sm max-w-none">
+                                {value.split('\n').map((line, index) => (
+                                    <p key={index} className="mb-1">{line}</p>
+                                ))}
+                            </div>
                         ) : (
-                            <p className="text-gray-400 italic">No content to preview</p>
+                            <p className="text-neutral-400 italic">No content to preview</p>
                         )}
                     </div>
                 )}
             </div>
 
             {/* Footer with keyboard shortcuts hint */}
-            <div className="mt-2 text-xs text-gray-400 flex items-center justify-between">
-                <span>{value.length} characters</span>
-                <span>Ctrl+S to save • Shift+Enter for new line</span>
+            <div className="px-4 py-2 border-t border-neutral-200 bg-neutral-50 flex items-center justify-between">
+                <span className="text-xs text-neutral-500">{value.length} characters</span>
+                <span className="text-xs text-neutral-400">Ctrl+S to save • Shift+Enter for new line</span>
             </div>
         </div>
     );

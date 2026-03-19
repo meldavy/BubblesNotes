@@ -4,7 +4,7 @@ description: "Task list for Notes App with AI Integration feature"
 
 # Tasks: Notes App with AI Integration
 
-**Input**: Design documents from `/specs/notes-app-ai-integration/`
+**Input**: Design documents from `/specs/bubbles-notes/`
 **Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/
 
 **Tests**: Tests are MUST REQUIRED. Aim for 100% coverage, including negative scenarios and edge cases. Additionally, create integration test-style unit tests as well that verifies functionality across components.
@@ -66,7 +66,10 @@ gradlew.bat compileKotlin --console=plain
 - [ ] T013 Implement encrypted session storage for authentication tokens
 - [x] T014 Create API key generation and validation service in `src/main/kotlin/services/ApiKeyService.kt`
 - [x] T015 Configure database connection pool with HikariCP in `Databases.kt`
-- [ ] T016 Setup dependency injection module in `src/main/kotlin/GuiceModules.kt` (optional)
+- [ ] T018 [Infrastructure] Add profile-based database configuration (H2 for dev, PostgreSQL for prod) in `application.yaml`
+- [ ] T019 [Infrastructure] Create `application-dev.yaml` with H2 in-memory database settings
+- [ ] T020 [Infrastructure] Create `application-prod.yaml` with PostgreSQL connection settings
+- [ ] T016 Setup dependency injection module in `src/main/kotlin/GuiceModules.kt` to properly configure NoteRepository for NotesApi
 - [x] T017 Implement server-side encryption service using centralized key in `src/main/kotlin/services/EncryptionService.kt`
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
@@ -103,31 +106,31 @@ gradlew.bat compileKotlin --console=plain
 
 ### Design System Setup
 
-- [ ] T026 Configure Tailwind CSS with custom theme colors and typography in `tailwind.config.js`
-- [ ] T027 Create design tokens file (`frontend/src/styles/tokens.css`) with color palette
-- [ ] T028 Set up global styles and CSS variables in `index.css`
-- [ ] T029 Install and configure @headlessui/react for accessible components
-- [ ] T030 Install @heroicons/react for consistent iconography
+- [x] T026 Configure Tailwind CSS with custom theme colors and typography in `tailwind.config.js`
+- [x] T027 Create design tokens file (`frontend/src/styles/tokens.css`) with color palette
+- [x] T028 Set up global styles and CSS variables in `index.css`
+- [x] T029 Install and configure @headlessui/react for accessible components
+- [x] T030 Install @heroicons/react for consistent iconography
 
 ### Core UI Components
 
-- [ ] T031 Create Button component (`frontend/src/components/ui/Button.tsx`) with variants (primary, secondary, ghost, danger)
-- [ ] T032 Create Input component (`frontend/src/components/ui/Input.tsx`) with validation states
-- [ ] T033 Create Card component (`frontend/src/components/ui/Card.tsx`) with hover effects
-- [ ] T034 Create Modal/Dialog component (`frontend/src/components/ui/Modal.tsx`) with animations
-- [ ] T035 Create Loading components (`frontend/src/components/ui/Loading.tsx`) - spinner and skeleton loaders
-- [ ] T036 Create Toast notification system (`frontend/src/components/ui/Toast.tsx`)
+- [x] T031 Create Button component (`frontend/src/components/ui/Button.tsx`) with variants (primary, secondary, ghost, danger)
+- [x] T032 Create Input component (`frontend/src/components/ui/Input.tsx`) with validation states
+- [x] T033 Create Card component (`frontend/src/components/ui/Card.tsx`) with hover effects
+- [x] T034 Create Modal/Dialog component (`frontend/src/components/ui/Modal.tsx`) with animations
+- [x] T035 Create Loading components (`frontend/src/components/ui/Loading.tsx`) - spinner and skeleton loaders
+- [x] T036 Create Toast notification system (`frontend/src/components/ui/Toast.tsx`)
 
 ### Layout Components
 
-- [ ] T037 Create Dashboard layout wrapper with responsive grid in `frontend/src/components/Layout.tsx`
-- [ ] T038 Create Navigation header component (`frontend/src/components/Header.tsx`)
+- [x] T037 Create Dashboard layout wrapper with responsive grid in `frontend/src/components/Layout.tsx`
+- [x] T038 Create Navigation header component (`frontend/src/components/Header.tsx`)
 - [ ] T039 Create responsive container component for consistent max-width layouts
 
 ### Component Styling & Polish
 
-- [ ] T040 Style NoteEditor with professional focus states, auto-save indicator, and markdown toolbar
-- [ ] T041 Style Dashboard note cards with hover effects, transitions, and proper spacing
+- [x] T040 Style NoteEditor with professional focus states, auto-save indicator, and markdown toolbar
+- [x] T041 Style Dashboard note cards with hover effects, transitions, and proper spacing
 - [ ] T042 Style tag chips with remove functionality and consistent colors
 - [ ] T043 Style search bar with autocomplete dropdown and clear button
 - [ ] T044 Add smooth animations using CSS transitions (fadeIn, slideUp)
@@ -185,6 +188,13 @@ gradlew.bat compileKotlin --console=plain
 
 - [ ] T041 [US3] Implement split-view editor with live preview toggle
 - [ ] T042 [US3] Add Markdown toolbar with common formatting buttons
+
+### Backend Integration Tasks
+
+- [ ] T108 [Integration] Initialize noteRepository in Application.kt routing setup
+- [ ] T109 [Integration] Connect frontend NoteEditor onSave to actual backend POST /api/v1/notes
+- [ ] T110 [Integration] Implement auto-save mechanism with debounced API calls
+- [ ] T111 [Integration] Add proper error handling and user feedback for save failures
 
 ---
 

@@ -1,6 +1,6 @@
 # Quickstart Guide: Notes App with AI Integration
 
-**Branch**: `notes-app-ai-integration` | **Date**: 2026-03-18
+**Branch**: `bubbles-notes` | **Date**: 2026-03-18
 
 ## Prerequisites
 

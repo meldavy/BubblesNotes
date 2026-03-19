@@ -1,6 +1,6 @@
 # Implementation Plan: Notes App with AI Integration
 
-**Branch**: `notes-app-ai-integration` | **Date**: 2026-03-18 | **Spec**: [spec.md](./spec.md)
+**Branch**: `bubbles-notes` | **Date**: 2026-03-18 | **Spec**: [spec.md](./spec.md)
 **Input**: "Build a notes app like google keep"
 
 ## Summary
@@ -114,7 +114,7 @@ tasks.named<Jar>("jar") {
 ### Documentation (this feature)
 
 ```text
-specs/notes-app-ai-integration/
+specs/main/
 ├── plan.md              # This file (/speckit.plan command output)
 ├── spec.md              # Feature specification
 ├── research.md          # Phase 0 output (/speckit.plan command)
@@ -153,10 +153,10 @@ src/
         ├── api/             # API integration tests
         └── fixtures/        # Test data fixtures
 
-specs/notes-app-ai-integration/
-├── contracts/               # API contracts (OpenAPI/Swagger)
-│   └── api.yaml
-└── tests/                   # Contract and integration tests
+specs/main/
+└── contracts/               # API contracts (OpenAPI/Swagger)
+    └── api.yaml
+
 ```
 
 **Structure Decision**: Single project structure selected because:
