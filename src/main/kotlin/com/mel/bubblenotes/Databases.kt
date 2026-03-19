@@ -16,7 +16,9 @@ fun Application.configureDatabases() {
     val dbUrl = try {
         environment.config.property("db.url").getString()
     } catch (e: Exception) {
-        System.getProperty("db.url") ?: System.getenv("DB_URL") ?: "jdbc:h2:mem:bubblesnotes;DB_CLOSE_DELAY=-1;MODE=PostgreSQL"
+        // Use file-based H2 database for development to ensure data persists across connections
+        // In-memory H2 databases are connection-scoped by default, causing foreign key issues
+        System.getProperty("db.url") ?: System.getenv("DB_URL") ?: "jdbc:h2:file:./data/bubblesnotes;DB_CLOSE_DELAY=-1;MODE=PostgreSQL"
     }
     val dbUser = try {
         environment.config.property("db.user").getString()

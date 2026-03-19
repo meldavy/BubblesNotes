@@ -159,61 +159,61 @@ gradlew.bat compileKotlin --console=plain
 
 ### Auth Infrastructure Tasks
 
-- [ ] T051 [Login] Create React Context for authentication state in `frontend/src/contexts/AuthContext.tsx`
+- [x] T051 [Login] Create React Context for authentication state in `frontend/src/contexts/AuthContext.tsx`
   - Provide `useAuth()` hook with `isAuthenticated`, `user`, `isLoading`, `login()`, `logout()` values
   - Check auth status on mount via `/api/v1/auth/me` endpoint
   - Persist session state across page refreshes
 
 ### Landing Page Tasks
 
-- [ ] T052 [Login] Create landing page component in `frontend/src/pages/LandingPage.tsx`
+- [x] T052 [Login] Create landing page component in `frontend/src/pages/LandingPage.tsx`
   - Display app hero section with value proposition
   - Show "Sign in with Google" CTA button
   - Include feature highlights (quick notes, markdown, AI enhancement)
   - Handle both authenticated and unauthenticated states
 
-- [ ] T053 [Login] Update routing to show LandingPage for root `/` when not authenticated
+- [x] T053 [Login] Update routing to show LandingPage for root `/` when not authenticated
   - If authenticated, redirect to Dashboard instead
   - Use simple hash-based routing or React Router if available
 
 ### Dashboard Integration Tasks
 
-- [ ] T054 [Login] Wrap Dashboard in ProtectedRoute in `frontend/src/App.tsx`
+- [x] T054 [Login] Wrap Dashboard in ProtectedRoute in `frontend/src/App.tsx`
   - Ensure dashboard is only accessible when authenticated
   - Show loading state during auth check
 
-- [ ] T055 [Login] Create ProtectedRoute wrapper component in `frontend/src/components/ProtectedRoute.tsx`
+- [x] T055 [Login] Create ProtectedRoute wrapper component in `frontend/src/components/ProtectedRoute.tsx`
   - Redirect to landing page if user is not authenticated
   - Show loading spinner while checking auth status
   - Allow access only when authenticated
 
 ### Header Integration Tasks
 
-- [ ] T056 [Login] Create UserProfile dropdown component in `frontend/src/components/UserProfile.tsx`
+- [x] T056 [Login] Create UserProfile dropdown component in `frontend/src/components/UserProfile.tsx`
   - Show user avatar and email address when authenticated
   - Dropdown menu with logout option on click
   - Use Headless UI Menu for accessible dropdown behavior
 
-- [ ] T057 [Login] Update Header to conditionally render auth components in `frontend/src/components/Header.tsx`
+- [x] T057 [Login] Update Header to conditionally render auth components in `frontend/src/components/Header.tsx`
   - When NOT authenticated: Render LoginButton component (for landing page)
   - When authenticated: Render UserProfile dropdown component (for dashboard)
   - Pass auth callbacks from AuthContext to both components
 
 ### UX Polish Tasks
 
-- [ ] T058 [Login] Add loading states during authentication checks across all components
+- [x] T058 [Login] Add loading states during authentication checks across all components
   - Prevent flash of unauthenticated content
   - Show skeleton loaders while verifying session
 
-- [ ] T059 [Login] Implement redirect after login to original requested page
+- [x] T059 [Login] Implement redirect after login to original requested page
   - Preserve intended destination before OAuth redirect
   - Return user to same page after successful authentication
 
-- [ ] T060 [Login] Add error handling for OAuth failures with user-friendly messages
+- [x] T060 [Login] Add error handling for OAuth failures with user-friendly messages
   - Handle Google OAuth errors gracefully
   - Show retry options when auth service is unavailable
 
-- [ ] T061 [Login] Implement automatic logout on session expiration in `frontend/src/contexts/AuthContext.tsx`
+- [x] T061 [Login] Implement automatic logout on session expiration in `frontend/src/contexts/AuthContext.tsx`
   - Detect 401 Unauthorized responses from backend API calls
   - Automatically clear auth state and redirect to landing page when OAuth token is no longer valid
   - Use fetch interceptor or wrapper function to catch auth errors globally
@@ -241,13 +241,109 @@ gradlew.bat compileKotlin --console=plain
 
 - [x] T034 [US2] Add CSRF protection token generation and validation
 - [x] T035 [US2] Implement token refresh mechanism for expired OAuth tokens
-- [ ] T132 [US2] Configure Ktor to return 401 Unauthorized for unauthenticated requests
-  - Ensure all protected routes respond with HTTP 401 when session is invalid or missing
-  - This enables frontend to detect session expiration and trigger auto-logout (T061)
+- [x] T132 [US2] Configure Ktor to return 401 Unauthorized for unauthenticated requests
+   - Ensure all protected routes respond with HTTP 401 when session is invalid or missing
+   - This enables frontend to detect session expiration and trigger auto-logout (T061)
+
+### Test Coverage Tasks
+
+- [x] T036 [US2] Create integration tests for SPA routing in `src/test/kotlin/com/mel/bubblenotes/AuthIntegrationTest.kt`
+  - Verify `/dashboard`, `/settings`, `/profile` return 200 OK (serve index.html)
+  - Verify API routes return 401 when not authenticated
+- [x] T037 [US2] Add tests for authentication flow in `AuthIntegrationTest.kt`
+  - Test logout endpoint clears session cookie
+  - Test `/auth/me` returns 401 without valid session
+  - Test OAuth callback returns 503 when not configured
+- [x] T038 [Login] Fix frontend session cookie handling in `frontend/src/contexts/AuthContext.tsx`
+  - Add `credentials: 'include'` to all fetch calls for session cookie transmission
+  - Verify `/api/v1/auth/me` and `/api/v1/auth/userinfo` include cookies
+- [x] T039 [Login] Configure CORS in Ktor for cross-origin frontend requests in `Security.kt`
+  - Install CORS plugin with `anyHost()` and `allowCredentials = true`
+  - Ensure session cookies work when frontend runs on different port
 
 ---
 
-## Phase 7: User Story 3 - Markdown Note Editing (Priority: P2)
+## Phase 7: Dashboard Integration (Priority: P1) 🎯
+
+**Goal**: Wire up the Dashboard UI to load notes from the server and make note cards functional
+
+**Problem Statement**: The Dashboard page exists but is not fully integrated with the backend:
+- Notes are not loaded from the server on page load
+- Note cards have non-functional edit and delete buttons
+- No loading states during data fetching
+- No error handling for API failures
+- Missing infinite scroll implementation for progressive note loading
+
+**Independent Test**: User logs in and sees their existing notes displayed as cards; clicking edit opens the note editor with pre-filled content; clicking delete removes the note from the list.
+
+### Data Loading Tasks
+
+- [x] T112 [Dashboard] Add `useEffect` hook in [`Dashboard.tsx`](frontend/src/pages/Dashboard.tsx:16) to fetch notes on component mount
+  - Call `GET /api/v1/notes?limit=20` endpoint
+  - Include `credentials: 'include'` for session cookie transmission
+  - Populate `notes` state with returned data
+
+- [x] T113 [Dashboard] Implement loading state in [`Dashboard.tsx`](frontend/src/pages/Dashboard.tsx:16)
+  - Add `isLoading` state variable
+  - Show skeleton loader or spinner while fetching notes
+  - Prevent flash of empty state during initial load
+
+- [x] T114 [Dashboard] Add error handling for note fetch failures
+  - Add `error` state variable
+  - Display user-friendly error message when API call fails
+  - Add retry button for transient errors
+
+### Note Card Functionality Tasks
+
+- [x] T115 [Dashboard] Implement edit button handler in [`Dashboard.tsx`](frontend/src/pages/Dashboard.tsx:130)
+  - Add onClick handler to edit button
+  - Load note content into NoteEditor when edit is clicked
+  - Scroll to top to show editor with pre-filled content
+
+- [x] T116 [Dashboard] Implement delete button handler in [`Dashboard.tsx`](frontend/src/pages/Dashboard.tsx:138)
+  - Call `DELETE /api/v1/notes/{id}` endpoint
+  - Remove deleted note from local state after successful deletion
+  - Add confirmation dialog before deletion
+
+- [x] T117 [Dashboard] Add optimistic UI updates for delete operation
+  - Immediately remove note from UI on delete click
+  - Show undo toast notification
+  - Rollback if delete API call fails
+
+### Infinite Scroll Tasks
+
+- [x] T118 [Dashboard] Implement cursor-based pagination in [`Dashboard.tsx`](frontend/src/pages/Dashboard.tsx:16)
+  - Track `nextCursor` from API response
+  - Load more notes when user scrolls near bottom
+  - Append new notes to existing list (don't replace)
+
+- [x] T119 [Dashboard] Create InfiniteScroll loader component in [`frontend/src/components/InfiniteScroll.tsx`](frontend/src/components/InfiniteScroll.tsx)
+  - Use IntersectionObserver to detect scroll position
+  - Show loading spinner at bottom of notes list
+  - Trigger callback when user scrolls near bottom
+
+- [x] T120 [Dashboard] Add loading state for pagination in [`Dashboard.tsx`](frontend/src/pages/Dashboard.tsx:16)
+  - Track `isLoadingMore` state separately from initial load
+  - Show subtle loader between notes when fetching next page
+  - Prevent multiple simultaneous fetch requests
+
+### UI/UX Polish Tasks
+
+- [x] T121 [Dashboard] Add empty state improvement when no notes exist
+  - Show helpful message with tips for new users
+  - Keep "Create Your First Note" button functional
+
+- [x] T122 [Dashboard] Add note count badge that updates dynamically
+  - Display accurate count of loaded notes
+  - Update when notes are added/deleted
+
+- [x] T123 [Dashboard] Implement pull-to-refresh for mobile devices
+  - Add refresh control for mobile view
+  - Reload all notes when pulled down
+
+---
+
+## Phase 8: User Story 3 - Markdown Note Editing (Priority: P2)
 
 **Goal**: Support Markdown formatting in note editing with real-time preview
 
@@ -275,7 +371,7 @@ gradlew.bat compileKotlin --console=plain
 
 ---
 
-## Phase 8: User Story 4 - URL Preview Generation (Priority: P2)
+## Phase 9: User Story 4 - URL Preview Generation (Priority: P2)
 
 **Goal**: Automatically generate preview cards for URLs in note content
 
@@ -298,7 +394,7 @@ gradlew.bat compileKotlin --console=plain
 
 ---
 
-## Phase 9: User Story 5 - File Attachments (Priority: P2)
+## Phase 10: User Story 5 - File Attachments (Priority: P2)
 
 **Goal**: Allow attaching files to notes with server-side encryption during upload/download
 
@@ -321,7 +417,7 @@ gradlew.bat compileKotlin --console=plain
 
 ---
 
-## Phase 10: User Story 6 - Tagging System (Priority: P3)
+## Phase 11: User Story 6 - Tagging System (Priority: P3)
 
 **Goal**: Support adding, displaying, and filtering by tags on notes
 
@@ -344,7 +440,7 @@ gradlew.bat compileKotlin --console=plain
 
 ---
 
-## Phase 11: User Story 7 - Content Search (Priority: P3)
+## Phase 12: User Story 7 - Content Search (Priority: P3)
 
 **Goal**: Enable search across note content, tags, and attachment filenames
 
@@ -366,7 +462,7 @@ gradlew.bat compileKotlin --console=plain
 
 ---
 
-## Phase 12: User Story 8 - AI-Powered Note Enhancement (Priority: P4)
+## Phase 13: User Story 8 - AI-Powered Note Enhancement (Priority: P4)
 
 **Goal**: Automatically generate summaries, titles, and tag suggestions using AI
 
@@ -388,7 +484,7 @@ gradlew.bat compileKotlin --console=plain
 
 ---
 
-## Phase 13: User Story 9 - Infinite Scroll with Lazy Loading (Priority: P4)
+## Phase 14: User Story 9 - Infinite Scroll with Lazy Loading (Priority: P4)
 
 **Goal**: Load notes progressively as user scrolls for responsive UI
 
@@ -409,7 +505,7 @@ gradlew.bat compileKotlin --console=plain
 
 ---
 
-## Phase 14: User Story 10 - Programmatic API Access (Priority: P5)
+## Phase 15: User Story 10 - Programmatic API Access (Priority: P5)
 
 **Goal**: Provide REST APIs for programmatic note access via API key
 
@@ -430,7 +526,7 @@ gradlew.bat compileKotlin --console=plain
 
 ---
 
-## Phase 15: Polish & Cross-Cutting Concerns
+## Phase 16: Polish & Cross-Cutting Concerns
 
 **Purpose**: Final polish and non-functional requirements
 
@@ -461,15 +557,16 @@ Phase 1 (Setup) ──┐
                   │                           ├→ Phase 4 (UI Design & Component Library)
                   │                           ├→ Phase 5 (Login Flow CX)
                   │                           ├→ Phase 6 (US2: OAuth Auth Backend)
-                  │                           ├→ Phase 7 (US3: Markdown Editing)
-                  │                           ├→ Phase 8 (US4: URL Preview)
-                  │                           ├→ Phase 9 (US5: File Attachments)
-                  │                           ├→ Phase 10 (US6: Tagging System)
-                  │                           ├→ Phase 11 (US7: Content Search)
-                  │                           ├→ Phase 12 (US8: AI Enhancement)
-                  │                           ├→ Phase 13 (US9: Infinite Scroll)
-                  │                           ├→ Phase 14 (US10: API Access)
-                  └→ Phase 15 (Polish & Cross-Cutting)
+                  │                           ├→ Phase 7 (Dashboard Integration) 🎯
+                  │                           ├→ Phase 8 (US3: Markdown Editing)
+                  │                           ├→ Phase 9 (US4: URL Preview)
+                  │                           ├→ Phase 10 (US5: File Attachments)
+                  │                           ├→ Phase 11 (US6: Tagging System)
+                  │                           ├→ Phase 12 (US7: Content Search)
+                  │                           ├→ Phase 13 (US8: AI Enhancement)
+                  │                           ├→ Phase 14 (US9: Infinite Scroll)
+                  │                           ├→ Phase 15 (US10: API Access)
+                  └→ Phase 16 (Polish & Cross-Cutting)
 ```
 
 ## Parallel Execution Examples
@@ -497,19 +594,21 @@ This provides a working notes app with basic CRUD operations and immediate note 
 After MVP, add user stories in priority order:
 1. **Phase 5**: Login Flow CX - Enables actual authentication UX
 2. **Phase 6**: OAuth Backend - Ensures backend auth is complete
-3. **US3 (Markdown)** - Improves content formatting
-4. **US4-US7** - Enhancement features
-5. **US8-US10** - Advanced features
+3. **Phase 7**: Dashboard Integration 🎯 - Wires up notes loading and functional note cards
+4. **Phase 8**: US3 (Markdown) - Improves content formatting
+5. **Phase 9-12**: Enhancement features (URL Preview, Attachments, Tagging, Search)
+6. **Phase 13-15**: Advanced features (AI, Infinite Scroll, API Access)
 
 ---
 
 ## Summary
 
-- **Total Tasks**: 131
+- **Total Tasks**: 143
 - **Setup Phase**: 5 tasks
 - **Foundational Phase**: 12 tasks (added Guice DI and server-side encryption)
 - **UI Design Phase**: 25 tasks (T026-T050: design system, components, styling, accessibility)
 - **Login Flow CX Phase**: 9 tasks (NEW - T051-T059)
+- **Dashboard Integration Phase**: 12 tasks (NEW - T112-T123: data loading, note card functionality, infinite scroll)
 - **User Story Phases**: 75 tasks (P1: 10, P2: 36, P3: 20, P4: 17, P5: 9)
 - **Polish Phase**: 7 tasks (added build system integration)
 

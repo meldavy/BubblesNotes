@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { LoginButton } from './LoginButton';
+import { UserProfile } from './UserProfile';
 
 export interface HeaderProps {
   /** App title/logo text */
@@ -28,9 +29,48 @@ export const Header: React.FC<HeaderProps> = ({
   showAuth = false,
   className = '',
 }) => {
+  // Authentication state
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  // Check authentication status on mount and when showAuth changes
+  useEffect(() => {
+    if (showAuth) {
+      checkAuthStatus();
+    } else {
+      // Even when not showing auth, we still need to check auth status
+      // so that authenticated users see the UserProfile dropdown
+      checkAuthStatus();
+    }
+  }, [showAuth]);
+
+  const checkAuthStatus = async () => {
+    try {
+      setIsLoading(true);
+      const response = await fetch('/api/v1/auth/me');
+      
+      if (response.ok) {
+        const data = await response.json();
+        
+        if (data.authenticated) {
+          setIsAuthenticated(true);
+        } else {
+          setIsAuthenticated(false);
+        }
+      } else {
+        setIsAuthenticated(false);
+      }
+    } catch (error) {
+      console.error('Error checking auth status:', error);
+      setIsAuthenticated(false);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <header className={`bg-white border-b border-neutral-200 shadow-sm ${className}`}>
-      <div className="container mx-auto px-4">
+      <div className="max-w-7xl mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           {/* Logo/Title */}
           <a href="/" className="flex items-center space-x-3 group">
@@ -76,12 +116,22 @@ export const Header: React.FC<HeaderProps> = ({
           )}
 
           {/* Right-side Actions */}
-          <div className="flex items-center space-x-3">
-            {showAuth ? (
-              <LoginButton />
-            ) : (
-              actions
-            )}
+           <div className="flex items-center space-x-3">
+             {isLoading ? (
+               // Loading state
+               <div className="w-8 h-8 flex items-center justify-center">
+                 <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+               </div>
+             ) : showAuth ? (
+                // Show login button for landing page
+                <LoginButton />
+              ) : isAuthenticated ? (
+               // Show user profile dropdown for authenticated users
+               <UserProfile />
+             ) : (
+               // Fallback to custom actions if provided
+               actions
+             )}
             
             {/* Mobile Menu Button (visible on small screens) */}
             <button

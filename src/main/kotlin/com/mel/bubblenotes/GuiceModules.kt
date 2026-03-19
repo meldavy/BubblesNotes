@@ -6,6 +6,7 @@ import com.google.inject.Singleton
 import com.mel.bubblenotes.repositories.AttachmentRepository
 import com.mel.bubblenotes.repositories.NoteRepository
 import com.mel.bubblenotes.repositories.TagRepository
+import com.mel.bubblenotes.repositories.UserRepository
 import com.mel.bubblenotes.services.ApiKeyService
 import com.mel.bubblenotes.services.EncryptionService
 import com.mel.bubblenotes.services.SessionStorage
@@ -44,6 +45,12 @@ class ApplicationModule(private val databaseService: DatabaseService) : Abstract
     @Singleton
     fun provideAttachmentRepository(): AttachmentRepository {
         return AttachmentRepository(databaseService.getConnection())
+    }
+
+    @Provides
+    @Singleton
+    fun provideUserRepository(): UserRepository {
+        return UserRepository(databaseService.getConnection())
     }
 }
 

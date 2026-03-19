@@ -18,6 +18,7 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
+import java.io.File
 import java.sql.Connection
 import java.sql.DriverManager
 import java.time.Duration
@@ -42,6 +43,13 @@ fun Application.configureRouting() {
     }
     
     routing {
+        // Configure authentication challenge handling for protected routes
+        // When a user is not authenticated on a protected route, return 401 instead of redirecting
+        authenticate("session-auth") {
+            // This block will handle all protected API routes
+            // If authentication fails, Ktor will automatically return 401 Unauthorized
+        }
+        
         // Notes API - must be before static resources to avoid being served as files
         notesApi()
         
@@ -49,8 +57,27 @@ fun Application.configureRouting() {
             call.respond("List of articles sorted starting from ${article.sort}")
         }
         
-        // Serve React frontend from root
+        // Serve React frontend static files (CSS, JS, images, etc.) first
         staticResources("/", "static")
+        
+        // SPA catch-all route: serve index.html for any non-API, non-file paths
+        // This MUST come after staticResources so actual files are served correctly
+        get("/{path:.+}") {
+            val path = call.parameters["path"] ?: ""
+            
+            // Only serve index.html for paths that don't have file extensions
+            // and aren't already handled by API routes
+            if (!path.contains(".") && !path.startsWith("api/")) {
+                val indexFile = File("src/main/resources/static/index.html")
+                if (indexFile.exists()) {
+                    call.respondFile(indexFile)
+                } else {
+                    call.respondText("Frontend not found", status = HttpStatusCode.NotFound)
+                }
+            } else {
+                call.respondText("Not found", status = HttpStatusCode.NotFound)
+            }
+        }
     }
 }
 

@@ -25,7 +25,8 @@ class ApplicationTest {
             module()
         }
         val response = client.get("/api/v1/notes/invalid")
-        assertEquals(HttpStatusCode.BadRequest, response.status)
+        // Without authentication, returns Unauthorized (401)
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
     }
 
     @Test
@@ -37,7 +38,8 @@ class ApplicationTest {
             contentType(io.ktor.http.ContentType.Application.Json)
             setBody("""{"title":"Test"}""")
         }
-        assertEquals(HttpStatusCode.BadRequest, response.status)
+        // Without authentication, returns Unauthorized (401)
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
     }
 
     @Test
@@ -46,6 +48,7 @@ class ApplicationTest {
             module()
         }
         val response = client.delete("/api/v1/notes/invalid")
-        assertEquals(HttpStatusCode.BadRequest, response.status)
+        // Without authentication, returns Unauthorized (401)
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
     }
 }

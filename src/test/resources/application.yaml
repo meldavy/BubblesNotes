@@ -4,12 +4,24 @@ ktor:
       - com.mel.bubblenotes.ApplicationKt.module
   deployment:
     port: 8080
-# Test configuration uses H2 in-memory database
+
+# Database configuration (uses H2 in-memory for testing)
 db:
-  url: "jdbc:h2:mem:test;DB_CLOSE_DELAY=-1"
+  url: jdbc:h2:mem:test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL
   user: sa
-  password:
-postgres:
-  url: "jdbc:h2:mem:test;DB_CLOSE_DELAY=-1"
-  user: sa
-  password:
+  password: ""
+  pool-size: 10
+  min-idle: 2
+
+# Encryption settings for testing
+encryption:
+  key: test-encryption-key-for-testing!!
+  session-key: test-session-key-for-testing-only-48bytes!!!!!!!
+
+# Google OAuth configuration (dummy values for testing)
+oauth:
+  google:
+    client-id: "test-client-id.apps.googleusercontent.com"
+    client-secret: "test-client-secret"
+    redirect-uri: "http://localhost:8080/auth/google/callback"
+    scopes: "email,profile"

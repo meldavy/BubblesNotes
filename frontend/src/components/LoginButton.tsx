@@ -1,93 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { UserIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/outline';
+import React from 'react';
+import { useAuth } from '../contexts/AuthContext';
 
-interface UserInfo {
-  email: string;
-  name?: string;
-  pictureUrl?: string;
-}
+export const LoginButton: React.FC = () => {
+  const { login, isLoading } = useAuth();
 
-interface LoginButtonProps {
-  onLoginSuccess?: (user: UserInfo) => void;
-  onLogoutSuccess?: () => void;
-}
-
-export const LoginButton: React.FC<LoginButtonProps> = ({ 
-  onLoginSuccess, 
-  onLogoutSuccess 
-}) => {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [user, setUser] = useState<UserInfo | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-
-  // Check authentication status on mount
-  useEffect(() => {
-    checkAuthStatus();
-  }, []);
-
-  const checkAuthStatus = async () => {
-    try {
-      const response = await fetch('/api/v1/auth/me');
-      
-      if (response.ok) {
-        const data = await response.json();
-        
-        // If authenticated, we need to get user info from the session
-        // For now, we'll just mark as authenticated
-        setIsAuthenticated(true);
-        
-        // Try to fetch additional user info if available
-        try {
-          const userInfoResponse = await fetch('/api/v1/auth/userinfo');
-          if (userInfoResponse.ok) {
-            const userInfo = await userInfoResponse.json();
-            setUser(userInfo);
-          }
-        } catch (e) {
-          // User info endpoint may not be available, that's ok
-        }
-        
-        onLoginSuccess?.(user || { email: 'user@example.com' });
-      } else {
-        setIsAuthenticated(false);
-        setUser(null);
-      }
-    } catch (error) {
-      console.error('Error checking auth status:', error);
-      setIsAuthenticated(false);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleLogin = () => {
-    // Redirect to Google OAuth login
-    const redirectUrl = encodeURIComponent(window.location.origin + window.location.pathname);
-    window.location.href = `/auth/google?redirect=${redirectUrl}`;
-  };
-
-  const handleLogout = async () => {
-    try {
-      const response = await fetch('/auth/logout', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        setIsAuthenticated(false);
-        setUser(null);
-        onLogoutSuccess?.();
-        
-        // Reload page to clear any cached state
-        window.location.reload();
-      } else {
-        console.error('Logout failed');
-      }
-    } catch (error) {
-      console.error('Error during logout:', error);
-    }
+  const handleLoginClick = () => {
+    login();
   };
 
   if (isLoading) {
@@ -98,44 +16,9 @@ export const LoginButton: React.FC<LoginButtonProps> = ({
     );
   }
 
-  if (isAuthenticated && user) {
-    return (
-      <div className="flex items-center gap-3">
-        {/* User Avatar */}
-        {user.pictureUrl ? (
-          <img 
-            src={user.pictureUrl} 
-            alt={user.name || 'User'}
-            className="w-8 h-8 rounded-full object-cover border-2 border-blue-500"
-          />
-        ) : (
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-sm font-medium">
-            {user.name?.charAt(0) || user.email.charAt(0).toUpperCase()}
-          </div>
-        )}
-        
-        {/* User Info */}
-        <div className="hidden md:block">
-          <p className="text-sm font-medium text-gray-900">{user.name || 'User'}</p>
-          <p className="text-xs text-gray-500">{user.email}</p>
-        </div>
-        
-        {/* Logout Button */}
-        <button
-          onClick={handleLogout}
-          className="p-2 rounded-lg hover:bg-red-50 transition-colors group"
-          title="Sign out"
-        >
-          <ArrowRightOnRectangleIcon className="w-5 h-5 text-gray-600 group-hover:text-red-600" />
-        </button>
-      </div>
-    );
-  }
-
-  // Login Button
   return (
     <button
-      onClick={handleLogin}
+      onClick={handleLoginClick}
       className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all duration-200 shadow-sm hover:shadow-md"
     >
       {/* Google Icon */}

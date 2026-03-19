@@ -7,11 +7,11 @@ fun main(args: Array<String>) {
 }
 
 fun Application.module() {
-    configureSecurity()
     configureMonitoring()
     configureSerialization()
     configureDatabases()
     configureDI()  // Configure dependency injection after databases
+    configureSecurity()  // Move security after DI so we can inject userRepository
     configureSockets()
     configureRouting()
 }

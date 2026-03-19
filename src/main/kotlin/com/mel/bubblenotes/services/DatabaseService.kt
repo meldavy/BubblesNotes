@@ -24,9 +24,10 @@ class DatabaseService(private val application: Application) {
         val embedded = if (configValue.isEmpty()) true else configValue.toBoolean()
         
         if (embedded) {
-            // Use H2 for testing/development
+            // Use H2 for testing/development with shared cache mode
+            // The 'mem:' prefix with a database name allows multiple connections to share the same in-memory database
             val config = HikariConfig().apply {
-                jdbcUrl = "jdbc:h2:mem:test;DB_CLOSE_DELAY=-1"
+                jdbcUrl = "jdbc:h2:mem:bubblesnotes;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;CACHE_SIZE_KB=1024"
                 driverClassName = "org.h2.Driver"
                 username = "root"
                 password = ""

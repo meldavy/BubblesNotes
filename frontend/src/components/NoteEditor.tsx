@@ -1,17 +1,24 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Button } from './ui/Button';
 
 interface NoteEditorProps {
     value: string;
     onChange: (value: string) => void;
     onSave?: () => void;
     placeholder?: string;
+    isEditing?: boolean;
+    onCancel?: () => void;
+    isSaving?: boolean;
 }
 
-export const NoteEditor: React.FC<NoteEditorProps> = ({ 
-    value, 
-    onChange, 
+export const NoteEditor: React.FC<NoteEditorProps> = ({
+    value,
+    onChange,
     onSave,
-    placeholder = "Type your note here..." 
+    placeholder = "Type your note here...",
+    isEditing = false,
+    onCancel,
+    isSaving = false
 }) => {
     const [isFocused, setIsFocused] = useState(false);
     const [showPreview, setShowPreview] = useState(false);
@@ -105,7 +112,14 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
                     <svg className="w-5 h-5 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                     </svg>
-                    <span className="text-sm font-medium text-neutral-700">Quick Note</span>
+                    <span className="text-sm font-medium text-neutral-700">
+                        {isEditing ? 'Editing Note' : 'Quick Note'}
+                    </span>
+                    {isEditing && (
+                        <span className="text-xs bg-primary-100 text-primary-700 px-2 py-0.5 rounded-full">
+                            Edit Mode
+                        </span>
+                    )}
                 </div>
                 
                 <div className="flex items-center space-x-3">
@@ -192,10 +206,32 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
                 )}
             </div>
 
-            {/* Footer with keyboard shortcuts hint */}
+            {/* Footer with keyboard shortcuts hint and action buttons */}
             <div className="px-4 py-2 border-t border-neutral-200 bg-neutral-50 flex items-center justify-between">
                 <span className="text-xs text-neutral-500">{value.length} characters</span>
-                <span className="text-xs text-neutral-400">Ctrl+S to save • Shift+Enter for new line</span>
+                <div className="flex items-center space-x-3">
+                    <span className="text-xs text-neutral-400">Ctrl+S to save • Shift+Enter for new line</span>
+                    {isEditing && onCancel && (
+                        <>
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={onCancel}
+                                disabled={isSaving}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={handleSave}
+                                disabled={isSaving || !value.trim()}
+                            >
+                                {isSaving ? 'Saving...' : 'Save Changes'}
+                            </Button>
+                        </>
+                    )}
+                </div>
             </div>
         </div>
     );
