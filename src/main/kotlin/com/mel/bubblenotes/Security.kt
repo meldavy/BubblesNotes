@@ -426,10 +426,6 @@ fun Application.configureSecurity(
                 
                 // DEBUG: Log cookie headers received
                 val allCookies = call.request.headers["Cookie"]
-                call.application.log.info("Cookie header present: ${allCookies != null}")
-                if (allCookies != null) {
-                    call.application.log.info("Cookies: $allCookies")
-                }
                 
                 if (userId == null) {
                     call.application.log.warn("UserId is null - returning 401")
@@ -443,11 +439,6 @@ fun Application.configureSecurity(
                 
                 // Get session data to include email in response
                 val session = call.sessions.get<UserSession>()
-                call.application.log.info("Session from sessions.get(): $session")
-                
-                if (session == null) {
-                    call.application.log.warn("Session is null despite having userId - session deserialization may have failed!")
-                }
                 
                 // Return user info without sensitive data (no oauthToken)
                 call.respond(HttpStatusCode.OK, mapOf(

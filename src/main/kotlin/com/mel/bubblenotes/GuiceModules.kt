@@ -7,9 +7,12 @@ import com.mel.bubblenotes.repositories.AttachmentRepository
 import com.mel.bubblenotes.repositories.NoteRepository
 import com.mel.bubblenotes.repositories.TagRepository
 import com.mel.bubblenotes.repositories.UserRepository
+import com.mel.bubblenotes.repositories.NoteTagRepository
 import com.mel.bubblenotes.services.ApiKeyService
 import com.mel.bubblenotes.services.EncryptionService
 import com.mel.bubblenotes.services.SessionStorage
+import com.mel.bubblenotes.services.URLPreviewService
+import com.mel.bubblenotes.services.TagService
 import io.ktor.server.application.*
 import io.ktor.util.*
 
@@ -52,7 +55,13 @@ class ApplicationModule(private val databaseService: DatabaseService) : Abstract
     fun provideUserRepository(): UserRepository {
         return UserRepository(databaseService.getConnection())
     }
-}
+
+    @Provides
+    @Singleton
+    fun provideNoteTagRepository(): NoteTagRepository {
+        return NoteTagRepository(databaseService.getConnection())
+    }
+    }
 
 /**
  * Extension function to configure Guice DI in Ktor application.
@@ -70,6 +79,17 @@ fun Application.configureDI() {
     // Initialize repositories from injector and set them for API routes
     val noteRepository = injector.getInstance(NoteRepository::class.java)
     com.mel.bubblenotes.api.noteRepository = noteRepository
+    
+    // Initialize URL preview service for API routes
+    com.mel.bubblenotes.api.urlPreviewService = URLPreviewService()
+
+    // Initialize NoteTagRepository for tag relationships
+    val noteTagRepository = injector.getInstance(com.mel.bubblenotes.repositories.NoteTagRepository::class.java)
+    com.mel.bubblenotes.api.noteTagRepository = noteTagRepository
+
+    // Initialize TagService
+    val tagService = com.mel.bubblenotes.services.TagService(noteTagRepository, injector.getInstance(com.mel.bubblenotes.repositories.TagRepository::class.java), injector.getInstance(com.mel.bubblenotes.repositories.NoteRepository::class.java))
+    com.mel.bubblenotes.api.tagService = tagService
 
     // Log DI initialization
     environment.log.info("Dependency injection configured with Guice")

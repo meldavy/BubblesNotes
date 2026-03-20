@@ -373,22 +373,32 @@ gradlew.bat compileKotlin --console=plain
 
 **Goal**: Automatically generate preview cards for URLs in note content
 
-**Independent Test**: When a note contains a URL, a preview card appears showing the title, description, and favicon of the linked page.
+**Display Rules**:
+- URL previews should ONLY be displayed in:
+  1. The preview mode of the markdown editor (or the split screen preview)
+  2. On the cards in the saved notes (Dashboard)
+- URL previews should NOT show up directly on the markdown part of the editor (raw text mode)
 
-### Implementation Tasks
+**Independent Test**: When a note contains a URL, a preview card appears showing the title, description, and favicon of the linked page in the preview mode and note cards, but not in the raw markdown editor.
 
-- [ ] T067 [US4] Create URL detection regex pattern for Markdown content
-- [ ] T068 [US4] Implement HTTP client for fetching URL metadata (title, description, favicon)
-- [ ] T069 [US4] Add 5-second timeout per URL fetch to prevent blocking
-- [ ] T070 [US4] Create URL preview cache service in `src/main/kotlin/services/url_cache_service.kt`
-- [ ] T071 [US4] Store preview data as JSONB in notes table (preview_data column)
-- [ ] T072 [US4] Update Note entity model to include preview_data field
+### Backend Implementation Tasks
 
-### UI/UX Tasks
+- [x] T067 [US4] Create URL detection regex pattern for Markdown content
+- [x] T068 [US4] Implement HTTP client for fetching URL metadata (title, description, favicon)
+- [x] T069 [US4] Add 5-second timeout per URL fetch to prevent blocking
+- [x] T070 [US4] Create URL preview cache service in `src/main/kotlin/services/UrlPreviewService.kt`
+- [x] T071 [US4] Store preview data as JSONB in notes table (preview_data column)
+- [x] T072 [US4] Update Note entity model to include preview_data field
+- [x] T133 [US4] Add endpoint GET `/api/v1/notes/{id}/previews` to fetch URL previews for a note
 
-- [ ] T073 [US4] Create React URLPreview component in `frontend/src/components/URLPreview.tsx`
-- [ ] T074 [US4] Display preview card with title, description, and favicon
-- [ ] T075 [US4] Handle fetch errors gracefully (show raw URL if preview fails)
+### Frontend Implementation Tasks
+
+- [x] T073 [US4] Create React URLPreview component in `frontend/src/components/URLPreview.tsx`
+- [x] T074 [US4] Display preview card with title, description, and favicon
+- [x] T075 [US4] Handle fetch errors gracefully (show raw URL if preview fails)
+- [x] T134 [US4] Integrate URLPreview in MarkdownPreview component (`frontend/src/components/MarkdownPreview.tsx`) - show only in preview mode
+- [x] T135 [US4] Integrate URLPreview in Dashboard note cards (`frontend/src/pages/Dashboard.tsx`) - show previews on saved note cards
+- [x] T136 [US4] Ensure URL previews do NOT appear in raw markdown editor mode (text input area)
 
 ---
 

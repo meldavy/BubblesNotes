@@ -33,6 +33,9 @@ CREATE TABLE notes (
     ai_summary CLOB,
     ai_tags CLOB,
     last_version_id BIGINT,
+    preview_data CLOB,
+    tags CLOB DEFAULT '[]',
+    search_vector CLOB,
     created_at BIGINT DEFAULT 0,
     updated_at BIGINT DEFAULT 0
 );
@@ -52,7 +55,9 @@ CREATE TABLE versions (
 CREATE TABLE note_tags (
     note_id BIGINT NOT NULL REFERENCES notes(id),
     tag_id BIGINT NOT NULL REFERENCES tags(id),
-    PRIMARY KEY (note_id, tag_id)
+    user_id UUID NOT NULL REFERENCES users(id),
+    PRIMARY KEY (note_id, tag_id),
+    CONSTRAINT note_tags_unique UNIQUE (note_id, tag_id, user_id)
 );
 
 -- Attachments table
@@ -88,6 +93,3 @@ CREATE TABLE ai_tasks (
     started_at BIGINT,
     completed_at BIGINT
 );
-
--- Search vector column for full-text search
-ALTER TABLE notes ADD COLUMN search_vector CLOB;

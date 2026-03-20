@@ -35,14 +35,15 @@ export const Card: React.FC<CardProps> = ({
   return (
     <div
       className={`
-        bg-neutral-100 
-        rounded-lg 
-        border 
-        border-neutral-200 
+        bg-neutral-100
+        rounded-lg
+        border
+        border-neutral-200
         shadow-sm
-        transition-all 
-        duration-normal 
+        transition-all
+        duration-normal
         ease-out
+        flex flex-col h-full
         ${hoverable
           ? 'hover:shadow-lg hover:-translate-y-1 cursor-pointer'
           : ''
@@ -78,7 +79,7 @@ export const Card: React.FC<CardProps> = ({
       )}
 
       {/* Card Body */}
-      <div className="px-5 py-4">
+      <div className="px-5 py-4 flex-1">
         {children}
       </div>
     </div>

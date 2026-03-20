@@ -11,10 +11,13 @@ data class Note(
     val title: String?,
     val content: String,
     val isPublished: Boolean,
+    // Primary user-managed tags embedded directly on the note
+    val tags: List<String> = emptyList(),
     val aiTitle: String? = null,
     val aiSummary: String? = null,
     val aiTags: List<String>? = null,
     val lastVersionId: Long? = null,
+    val previewData: String? = null, // JSON string containing URL previews
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )

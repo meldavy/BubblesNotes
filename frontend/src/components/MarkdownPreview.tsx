@@ -3,11 +3,23 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
 import { Components } from 'react-markdown';
+import { URLPreview, URLPreviewList } from './URLPreview';
+
+interface URLPreviewData {
+  url: string;
+  title?: string;
+  description?: string;
+  favicon?: string;
+  image?: string;
+  siteName?: string;
+}
 
 interface MarkdownPreviewProps {
     content: string;
     maxLines?: number;
     className?: string;
+    showURLPreviews?: boolean;
+    urlPreviews?: URLPreviewData[];
 }
 
 /**
@@ -21,11 +33,14 @@ interface MarkdownPreviewProps {
  * - GitHub Flavored Markdown support (remark-gfm)
  * - Custom styling for common markdown elements
  * - Optional line clamping for truncated previews
+ * - Optional URL preview cards for links in content
  */
 export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
     content,
     maxLines = 3,
-    className = ''
+    className = '',
+    showURLPreviews = false,
+    urlPreviews = []
 }) => {
     if (!content || !content.trim()) {
         return <p className="text-neutral-400 italic">No content</p>;
@@ -108,6 +123,14 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
             >
                 {content}
             </ReactMarkdown>
+            
+            {/* URL Preview Cards - shown only when enabled and previews are available */}
+            {showURLPreviews && urlPreviews && urlPreviews.length > 0 && (
+                <div className="mt-4">
+                    <h4 className="text-sm font-semibold text-neutral-700 mb-2">Links</h4>
+                    <URLPreviewList previews={urlPreviews} />
+                </div>
+            )}
         </div>
     );
 };

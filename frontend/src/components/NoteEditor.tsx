@@ -1,8 +1,25 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
 import { Button } from './ui/Button';
+import { MarkdownPreview } from './MarkdownPreview';
+import { URLPreviewList } from './URLPreview';
+import { TagInput } from './TagInput';
+
+interface URLPreviewData {
+  url: string;
+  title?: string;
+  description?: string;
+  favicon?: string;
+  image?: string;
+  siteName?: string;
+}
+
+interface TagInfo {
+    id: number;
+    name: string;
+}
 
 interface NoteEditorProps {
     value: string;
@@ -13,6 +30,8 @@ interface NoteEditorProps {
     onCancel?: () => void;
     isSaving?: boolean;
     noteId?: number | null;
+    tags?: string[];
+    onTagChange?: (tags: string[]) => void;
 }
 
 /**
@@ -37,7 +56,9 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     isEditing = false,
     onCancel,
     isSaving = false,
-    noteId = null
+    noteId = null,
+    tags = [],
+    onTagChange
 }) => {
     const [isFocused, setIsFocused] = useState(false);
     const [viewMode, setViewMode] = useState<'edit' | 'preview' | 'split'>('edit');
@@ -45,6 +66,35 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     const [saveError, setSaveError] = useState<string | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [previews, setPreviews] = useState<URLPreviewData[]>([]);
+    const [isLoadingPreviews, setIsLoadingPreviews] = useState(false);
+
+    // Fetch previews when noteId is available
+    useEffect(() => {
+        const fetchPreviews = async () => {
+            if (!noteId) {
+                setPreviews([]);
+                return;
+            }
+
+            try {
+                setIsLoadingPreviews(true);
+                const response = await fetch(`/api/v1/notes/${noteId}/previews`, {
+                    credentials: 'include'
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    setPreviews(data);
+                }
+            } catch (err) {
+                console.error('Failed to fetch previews:', err);
+            } finally {
+                setIsLoadingPreviews(false);
+            }
+        };
+
+        fetchPreviews();
+    }, [noteId]);
 
     // Draft key for localStorage
     const getDraftKey = () => noteId ? `note-draft-${noteId}` : 'note-draft-quick';
@@ -96,6 +146,17 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
                     await onSave();
                 }
                 setSaveStatus('saved');
+                
+                // Fetch previews after auto-save to update them
+                if (noteId) {
+                    const response = await fetch(`/api/v1/notes/${noteId}/previews`, {
+                        credentials: 'include'
+                    });
+                    if (response.ok) {
+                        const data = await response.json();
+                        setPreviews(data);
+                    }
+                }
             } catch (err) {
                 setSaveStatus('error');
                 setSaveError(err instanceof Error ? err.message : 'Auto-save failed');
@@ -109,6 +170,8 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
         };
     }, [value, isEditing, noteId, onSave]);
 
+    // Tags are saved as part of the note payload now; no separate calls needed
+
     // Memoized handleSave to prevent re-creation on each render
     const handleSave = useCallback(async () => {
         if (!value.trim()) return;
@@ -117,15 +180,18 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
         setSaveError(null);
 
         try {
-            if (onSave) {
-                await onSave();
-            }
-            setSaveStatus('saved');
-        } catch (err) {
+             if (onSave) {
+                 await onSave();
+             }
+             
+             // Tags are included in note update/create; nothing extra to do here
+             
+             setSaveStatus('saved');
+         } catch (err) {
             setSaveStatus('error');
             setSaveError(err instanceof Error ? err.message : 'Save failed');
         }
-    }, [value, onSave]);
+    }, [value, onSave, noteId, tags]);
 
     // Memoized cycleViewMode to prevent re-creation on each render
     const cycleViewMode = useCallback(() => {
@@ -324,49 +390,13 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
                     <div className={`${viewMode === 'split' ? 'w-1/2' : 'w-full'} ${viewMode === 'split' ? 'float-left' : ''}`}>
                         <div className="w-full h-64 p-4 overflow-auto bg-neutral-50">
                             {value ? (
-                                <ReactMarkdown
-                                    remarkPlugins={[remarkGfm]}
-                                    rehypePlugins={[rehypeSanitize]}
-                                    components={{
-                                        // Custom component styling
-                                        h1: ({ children }) => <h1 className="text-2xl font-bold text-neutral-800 mb-4">{children}</h1>,
-                                        h2: ({ children }) => <h2 className="text-xl font-semibold text-neutral-700 mb-3">{children}</h2>,
-                                        h3: ({ children }) => <h3 className="text-lg font-semibold text-neutral-700 mb-2">{children}</h3>,
-                                        p: ({ children }) => <p className="mb-3 text-neutral-700 leading-relaxed">{children}</p>,
-                                        ul: ({ children }) => <ul className="list-disc list-inside mb-3 space-y-1">{children}</ul>,
-                                        ol: ({ children }) => <ol className="list-decimal list-inside mb-3 space-y-1">{children}</ol>,
-                                        li: ({ children }) => <li className="text-neutral-600">{children}</li>,
-                                        blockquote: ({ children }) => (
-                                            <blockquote className="border-l-4 border-primary-300 pl-4 my-3 italic text-neutral-600 bg-white rounded-r">{children}</blockquote>
-                                        ),
-                                        code: ({ children, className }) => (
-                                            <code className="bg-neutral-200 px-1.5 py-0.5 rounded text-sm font-mono text-neutral-800">{children}</code>
-                                        ),
-                                        pre: ({ children }) => (
-                                            <pre className="bg-neutral-800 text-neutral-100 p-4 rounded-lg overflow-x-auto my-3">
-                                                {children}
-                                            </pre>
-                                        ),
-                                        a: ({ href, children }) => (
-                                            <a href={href} className="text-primary-600 hover:text-primary-700 underline" target="_blank" rel="noopener noreferrer">
-                                                {children}
-                                            </a>
-                                        ),
-                                        table: ({ children }) => (
-                                            <div className="overflow-x-auto my-3">
-                                                <table className="min-w-full border-collapse border border-neutral-300">{children}</table>
-                                            </div>
-                                        ),
-                                        th: ({ children }) => (
-                                            <th className="border border-neutral-300 px-4 py-2 bg-neutral-100 font-semibold">{children}</th>
-                                        ),
-                                        td: ({ children }) => (
-                                            <td className="border border-neutral-300 px-4 py-2">{children}</td>
-                                        ),
-                                    }}
-                                >
-                                    {value}
-                                </ReactMarkdown>
+                                <MarkdownPreview 
+                                    content={value} 
+                                    showURLPreviews={true}
+                                    urlPreviews={previews}
+                                    maxLines={100} // Don't truncate in editor preview
+                                    className="text-sm"
+                                />
                             ) : (
                                 <p className="text-neutral-400 italic">No content to preview</p>
                             )}
@@ -374,6 +404,18 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
                     </div>
                 )}
             </div>
+
+            {/* Tag Input - placed below content editor */}
+            {(viewMode === 'edit' || viewMode === 'split') && onTagChange && (
+                <div className="px-4 py-3 border-t border-neutral-200 bg-white">
+                    <TagInput
+                        tags={tags}
+                        onChange={onTagChange}
+                        placeholder="Add tags (press Enter)..."
+                        maxTags={10}
+                    />
+                </div>
+            )}
 
             {/* Footer with keyboard shortcuts hint and action buttons */}
             <div className="px-4 py-2 border-t border-neutral-200 bg-neutral-50 flex items-center justify-between">
