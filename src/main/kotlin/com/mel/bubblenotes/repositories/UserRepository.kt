@@ -5,17 +5,17 @@ import java.sql.Connection
 import java.util.UUID
 
 open class UserRepository(private val connection: Connection) {
-    
     /**
      * Create a new user in the database.
      * Returns the ID of the created user, or throws an exception if the user already exists.
      */
     fun create(user: User): UUID {
-        val sql = """
+        val sql =
+            """
             INSERT INTO users (id, email, name, given_name, family_name, picture_url, oauth_token, encryption_salt, api_key, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """.trimIndent()
-        
+            """.trimIndent()
+
         connection.prepareStatement(sql, java.sql.Statement.RETURN_GENERATED_KEYS).use { stmt ->
             stmt.setObject(1, user.id)
             stmt.setString(2, user.email)
@@ -28,7 +28,7 @@ open class UserRepository(private val connection: Connection) {
             stmt.setString(9, user.apiKey)
             stmt.setLong(10, user.createdAt)
             stmt.setLong(11, user.updatedAt)
-            
+
             val affectedRows = stmt.executeUpdate()
             if (affectedRows == 0) {
                 throw Exception("Failed to create user: no rows affected")
@@ -36,21 +36,22 @@ open class UserRepository(private val connection: Connection) {
             return user.id
         }
     }
-    
+
     /**
      * Find a user by their UUID.
      * Returns null if the user does not exist.
      */
     fun findById(id: UUID): User? {
-        val sql = """
+        val sql =
+            """
             SELECT id, email, name, given_name, family_name, picture_url, oauth_token, encryption_salt, api_key, created_at, updated_at
             FROM users WHERE id = ?
-        """.trimIndent()
-        
+            """.trimIndent()
+
         connection.prepareStatement(sql).use { stmt ->
             stmt.setObject(1, id)
             val rs = stmt.executeQuery()
-            
+
             if (rs.next()) {
                 return User(
                     id = rs.getObject("id", UUID::class.java),
@@ -63,27 +64,28 @@ open class UserRepository(private val connection: Connection) {
                     encryptionSalt = rs.getString("encryption_salt"),
                     apiKey = rs.getString("api_key"),
                     createdAt = rs.getLong("created_at"),
-                    updatedAt = rs.getLong("updated_at")
+                    updatedAt = rs.getLong("updated_at"),
                 )
             }
             return null
         }
     }
-    
+
     /**
      * Find a user by their email address.
      * Returns null if the user does not exist.
      */
     fun findByEmail(email: String): User? {
-        val sql = """
+        val sql =
+            """
             SELECT id, email, name, given_name, family_name, picture_url, oauth_token, encryption_salt, api_key, created_at, updated_at
             FROM users WHERE LOWER(email) = LOWER(?)
-        """.trimIndent()
-        
+            """.trimIndent()
+
         connection.prepareStatement(sql).use { stmt ->
             stmt.setString(1, email)
             val rs = stmt.executeQuery()
-            
+
             if (rs.next()) {
                 return User(
                     id = rs.getObject("id", UUID::class.java),
@@ -96,25 +98,26 @@ open class UserRepository(private val connection: Connection) {
                     encryptionSalt = rs.getString("encryption_salt"),
                     apiKey = rs.getString("api_key"),
                     createdAt = rs.getLong("created_at"),
-                    updatedAt = rs.getLong("updated_at")
+                    updatedAt = rs.getLong("updated_at"),
                 )
             }
             return null
         }
     }
-    
+
     /**
      * Update an existing user in the database.
      * Returns true if the user was updated, false if the user does not exist.
      */
     fun update(user: User): Boolean {
-        val sql = """
+        val sql =
+            """
             UPDATE users 
             SET email = ?, name = ?, given_name = ?, family_name = ?, picture_url = ?, 
                 oauth_token = ?, encryption_salt = ?, api_key = ?, updated_at = ?
             WHERE id = ?
-        """.trimIndent()
-        
+            """.trimIndent()
+
         connection.prepareStatement(sql).use { stmt ->
             stmt.setString(1, user.email)
             stmt.setString(2, user.name)
@@ -126,7 +129,7 @@ open class UserRepository(private val connection: Connection) {
             stmt.setString(8, user.apiKey)
             stmt.setLong(9, user.updatedAt)
             stmt.setObject(10, user.id)
-            
+
             return stmt.executeUpdate() > 0
         }
     }

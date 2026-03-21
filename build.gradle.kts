@@ -8,6 +8,7 @@ plugins {
     kotlin("jvm") version "2.3.0"
     id("io.ktor.plugin") version "3.4.1"
     id("org.jetbrains.kotlin.plugin.serialization") version "2.3.0"
+    id("org.jlleitschuh.gradle.ktlint") version "12.1.0"
 }
 
 group = "com.mel.bubblenotes"
@@ -102,4 +103,11 @@ tasks.test {
     systemProperty("db.url", "jdbc:h2:mem:test;DB_CLOSE_DELAY=-1")
     systemProperty("db.user", "sa")
     systemProperty("db.password", "")
+}
+
+// Configure ktlint to exclude build.gradle.kts from certain rules
+ktlint {
+    filter {
+        exclude { it.file.path.contains("build.gradle.kts") }
+    }
 }

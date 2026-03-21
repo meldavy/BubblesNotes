@@ -2,8 +2,8 @@ package com.mel.bubblenotes
 
 import com.fasterxml.jackson.databind.*
 import com.mel.bubblenotes.api.notesApi
-import com.mel.bubblenotes.api.tagsApi
 import com.mel.bubblenotes.api.searchApi
+import com.mel.bubblenotes.api.tagsApi
 import io.ktor.http.*
 import io.ktor.resources.*
 import io.ktor.serialization.jackson.*
@@ -20,13 +20,9 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
-import java.io.File
-import java.sql.Connection
-import java.sql.DriverManager
-import java.time.Duration
-import kotlin.time.Duration.Companion.seconds
 import kotlinx.serialization.Serializable
 import org.slf4j.event.*
+import java.io.File
 
 fun Application.configureRouting() {
     install(Resources)
@@ -34,16 +30,16 @@ fun Application.configureRouting() {
         exception<Throwable> { call, cause ->
             // Log the full exception details internally for debugging
             call.application.log.error("Internal server error: ${cause.message}", cause)
-            
+
             // Return generic error message to clients without exposing internal details
             call.respondText(
                 text = """{"error": "An internal error occurred", "status": 500}""",
                 status = HttpStatusCode.InternalServerError,
-                contentType = ContentType.Application.Json
+                contentType = ContentType.Application.Json,
             )
         }
     }
-    
+
     routing {
         // Configure authentication challenge handling for protected routes
         // When a user is not authenticated on a protected route, return 401 instead of redirecting
@@ -51,26 +47,26 @@ fun Application.configureRouting() {
             // This block will handle all protected API routes
             // If authentication fails, Ktor will automatically return 401 Unauthorized
         }
-        
+
         // Notes API - must be before static resources to avoid being served as files
         notesApi()
         // Tags API
         tagsApi()
         // Search API
         searchApi()
-        
+
         get<Articles> { article ->
             call.respond("List of articles sorted starting from ${article.sort}")
         }
-        
+
         // Serve React frontend static files (CSS, JS, images, etc.) first
         staticResources("/", "static")
-        
+
         // SPA catch-all route: serve index.html for any non-API, non-file paths
         // This MUST come after staticResources so actual files are served correctly
         get("/{path:.+}") {
             val path = call.parameters["path"] ?: ""
-            
+
             // Only serve index.html for paths that don't have file extensions
             // and aren't already handled by API routes
             if (!path.contains(".") && !path.startsWith("api/")) {

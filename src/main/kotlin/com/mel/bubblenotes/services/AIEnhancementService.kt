@@ -16,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap
  * Service for AI-powered note enhancements.
  * Orchestrates AI task creation, processing, and result storage.
  * Follows testability constitution: dependencies are injectable.
- * 
+ *
  * Background scheduler runs every 30 seconds to process pending AI tasks.
  */
 class AIEnhancementService(
@@ -25,14 +25,14 @@ class AIEnhancementService(
     private val noteRepository: NoteRepository,
     private val schedulerScope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
     private val schedulerIntervalMs: Long = 30000, // 30 seconds default
-    private val workerId: String = "worker-${ProcessHandle.current().pid()}-${Thread.currentThread().id}"
+    private val workerId: String = "worker-${ProcessHandle.current().pid()}-${Thread.currentThread().id}",
 ) {
     companion object {
         private val logger: Logger = LoggerFactory.getLogger(AIEnhancementService::class.java)
     }
 
     private val processingTasks = ConcurrentHashMap<Long, Job>()
-    
+
     // Track scheduler state for monitoring
     private val _schedulerRunning = MutableStateFlow(false)
     val schedulerRunning: StateFlow<Boolean> = _schedulerRunning.asStateFlow()
@@ -47,11 +47,11 @@ class AIEnhancementService(
         logger.info("createAITask: Creating AI task for note $noteId")
         val taskId = aiTaskRepository.create(noteId)
         logger.info("createAITask: Created AI task $taskId for note $noteId")
-        
+
         // Schedule the task for processing
         logger.debug("createAITask: Scheduling task $taskId for async processing")
         scheduleTask(taskId)
-        
+
         return taskId
     }
 
@@ -65,11 +65,12 @@ class AIEnhancementService(
             logger.debug("scheduleTask: Cancelling existing job for task $taskId")
             existingJob.cancel()
         }
-        
+
         logger.debug("scheduleTask: Launching new job for task $taskId")
-        val job = schedulerScope.launch {
-            processTask(taskId)
-        }
+        val job =
+            schedulerScope.launch {
+                processTask(taskId)
+            }
         processingTasks[taskId] = job
         logger.debug("scheduleTask: Job scheduled for task $taskId, total active jobs: ${processingTasks.size}")
     }
@@ -79,7 +80,7 @@ class AIEnhancementService(
      */
     private suspend fun processTask(taskId: Long) {
         logger.info("processTask: Starting processing for task $taskId")
-        
+
         try {
             // Get the task
             logger.debug("processTask: Fetching task $taskId from repository")
@@ -107,7 +108,9 @@ class AIEnhancementService(
                 aiTaskRepository.setFailed(taskId, errorMsg)
                 return
             }
-            logger.info("processTask: Found note ${note.id} with content length: ${note.content.length} chars, tags: ${note.tags?.size ?: 0}")
+            logger.info(
+                "processTask: Found note ${note.id} with content length: ${note.content.length} chars, tags: ${note.tags?.size ?: 0}",
+            )
 
             // Get all unique tags from all notes for context
             val existingTags = noteRepository.getUniqueTagsByUserId(note.userId)
@@ -116,25 +119,33 @@ class AIEnhancementService(
             // Call OpenAI for enhancements
             logger.info("processTask: Calling OpenAI for enhancements on note ${note.id} (task $taskId)")
             val startTime = System.currentTimeMillis()
-            val enhancements = openAIClient.generateAllAIEnhancements(
-                content = note.content,
-                existingTags = existingTags
-            )
+            val enhancements =
+                openAIClient.generateAllAIEnhancements(
+                    content = note.content,
+                    existingTags = existingTags,
+                )
             val elapsed = System.currentTimeMillis() - startTime
             logger.info("processTask: OpenAI call completed in ${elapsed}ms for note ${note.id}")
 
             // Prepare result (OpenAIClient.AITaskResult has aiTitle, aiSummary, aiTags)
-            val result = AITaskResult(
-                aiTitle = enhancements.aiTitle,
-                aiSummary = enhancements.aiSummary,
-                aiTags = enhancements.aiTags
+            val result =
+                AITaskResult(
+                    aiTitle = enhancements.aiTitle,
+                    aiSummary = enhancements.aiSummary,
+                    aiTags = enhancements.aiTags,
+                )
+            logger.debug(
+                "processTask: Prepared result - title: ${result.aiTitle}, summary: ${result.aiSummary != null}, tags: ${result.aiTags.size}",
             )
-            logger.debug("processTask: Prepared result - title: ${result.aiTitle}, summary: ${result.aiSummary != null}, tags: ${result.aiTags.size}")
 
             // Update task as completed
             logger.debug("processTask: Marking task $taskId as completed")
             if (aiTaskRepository.setCompleted(taskId, result)) {
-                logger.info("processTask: Completed AI task $taskId for note ${note.id} - title: ${result.aiTitle?.take(50)}, summary: ${result.aiSummary != null}, tags: ${result.aiTags.size}")
+                logger.info(
+                    "processTask: Completed AI task $taskId for note ${note.id} - title: ${result.aiTitle?.take(
+                        50,
+                    )}, summary: ${result.aiSummary != null}, tags: ${result.aiTags.size}",
+                )
             } else {
                 logger.error("processTask: Failed to update task $taskId as completed")
             }
@@ -142,16 +153,16 @@ class AIEnhancementService(
             // Update note with AI enhancements
             logger.debug("processTask: Updating note ${note.id} with AI enhancements")
             if (noteRepository.updateAIEnhancements(
-                noteId = task.noteId,
-                aiTitle = result.aiTitle,
-                aiSummary = result.aiSummary,
-                aiTags = result.aiTags
-            )) {
+                    noteId = task.noteId,
+                    aiTitle = result.aiTitle,
+                    aiSummary = result.aiSummary,
+                    aiTags = result.aiTags,
+                )
+            ) {
                 logger.info("processTask: Updated note ${note.id} with AI enhancements")
             } else {
                 logger.error("processTask: Failed to update note ${note.id} with AI enhancements")
             }
-
         } catch (e: Exception) {
             logger.error("processTask: Error processing AI task $taskId: ${e.message}", e)
             logger.debug("processTask: Exception stack trace:", e)
@@ -170,10 +181,10 @@ class AIEnhancementService(
             logger.warn("Scheduler already running")
             return
         }
-        
+
         logger.info("Starting AI Enhancement Service scheduler (interval: ${schedulerIntervalMs}ms)")
         _schedulerRunning.value = true
-        
+
         schedulerScope.launch {
             while (isActive) {
                 try {
@@ -196,10 +207,10 @@ class AIEnhancementService(
             logger.info("processPendingTasks: No pending AI tasks to process (scheduler running)")
             return
         }
-        
+
         logger.info("processPendingTasks: Found ${pendingTasks.size} pending AI tasks to process")
         logger.debug("processPendingTasks: Task IDs: ${pendingTasks.map { it.id }}")
-        
+
         pendingTasks.forEach { task ->
             val isActive = processingTasks[task.id]?.isActive
             logger.debug("processPendingTasks: Task ${task.id} isActive=$isActive")
@@ -219,17 +230,17 @@ class AIEnhancementService(
     fun stop() {
         logger.info("stop: Stopping AI Enhancement Service scheduler...")
         _schedulerRunning.value = false
-        
+
         // Cancel all processing jobs
         val activeJobs = processingTasks.size
         logger.info("stop: Cancelling $activeJobs active processing jobs")
         processingTasks.values.forEach { it.cancel() }
         processingTasks.clear()
-        
+
         // Cancel the scheduler scope
         logger.debug("stop: Cancelling scheduler scope")
         schedulerScope.cancel()
-        
+
         logger.info("stop: AI Enhancement Service stopped")
     }
 
@@ -256,16 +267,19 @@ class AIEnhancementService(
         val pendingTasks = aiTaskRepository.findPendingTasks(100)
         val allTasks = pendingTasks.filter { it.noteId == noteId }
         logger.debug("getAITaskResultsForNote: Found ${allTasks.size} tasks for note $noteId")
-        
+
         val completedTasks = allTasks.filter { it.status == AITaskRepository.Status.COMPLETED }
         logger.debug("getAITaskResultsForNote: Found ${completedTasks.size} completed tasks for note $noteId")
-        
-        val result = completedTasks
-            .maxByOrNull { it.completedAt ?: 0 }
-            ?.result
-        
+
+        val result =
+            completedTasks
+                .maxByOrNull { it.completedAt ?: 0 }
+                ?.result
+
         if (result != null) {
-            logger.info("getAITaskResultsForNote: Found result for note $noteId - title: ${result.aiTitle}, summary: ${result.aiSummary != null}, tags: ${result.aiTags.size}")
+            logger.info(
+                "getAITaskResultsForNote: Found result for note $noteId - title: ${result.aiTitle}, summary: ${result.aiSummary != null}, tags: ${result.aiTags.size}",
+            )
         } else {
             logger.debug("getAITaskResultsForNote: No result found for note $noteId")
         }
@@ -281,14 +295,19 @@ class AIEnhancementService(
         logger.info("enhanceNoteImmediately: Enhancing note ${note.id} synchronously")
         // Get all unique tags from all notes for context
         val existingTags = noteRepository.getUniqueTagsByUserId(note.userId)
-        logger.debug("enhanceNoteImmediately: Note ${note.id} content length: ${note.content.length} chars, all unique tags: ${existingTags.size}")
-        val startTime = System.currentTimeMillis()
-        val result = openAIClient.generateAllAIEnhancements(
-            content = note.content,
-            existingTags = existingTags
+        logger.debug(
+            "enhanceNoteImmediately: Note ${note.id} content length: ${note.content.length} chars, all unique tags: ${existingTags.size}",
         )
+        val startTime = System.currentTimeMillis()
+        val result =
+            openAIClient.generateAllAIEnhancements(
+                content = note.content,
+                existingTags = existingTags,
+            )
         val elapsed = System.currentTimeMillis() - startTime
-        logger.info("enhanceNoteImmediately: Completed enhancing note ${note.id} in ${elapsed}ms - title: ${result.aiTitle}, summary: ${result.aiSummary != null}, tags: ${result.aiTags.size}")
+        logger.info(
+            "enhanceNoteImmediately: Completed enhancing note ${note.id} in ${elapsed}ms - title: ${result.aiTitle}, summary: ${result.aiSummary != null}, tags: ${result.aiTags.size}",
+        )
         return result
     }
 }

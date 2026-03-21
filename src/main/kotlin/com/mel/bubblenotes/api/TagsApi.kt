@@ -17,12 +17,15 @@ fun Route.tagsApi() {
         // List all unique tags for the current user (from notes.tags JSON column)
         // Uses efficient SQL with jsonb_array_elements_text - O(unique tags) not O(notes)
         get("/api/v1/tags") {
-            val userId = UUID.fromString(call.principal<UserId>()?.id ?: return@get call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Not authenticated")))
+            val userId =
+                UUID.fromString(
+                    call.principal<UserId>()?.id ?: return@get call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Not authenticated")),
+                )
             val repo = noteRepository ?: return@get call.respond(HttpStatusCode.ServiceUnavailable, mapOf("error" to "Note repository not configured"))
-            
+
             // Get unique tags using efficient database query
             val uniqueTags = repo.getUniqueTagsByUserId(userId)
-            
+
             call.respond(HttpStatusCode.OK, uniqueTags)
         }
     }

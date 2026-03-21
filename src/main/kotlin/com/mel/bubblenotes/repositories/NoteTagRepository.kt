@@ -9,9 +9,10 @@ import java.sql.Connection
 open class NoteTagRepository(private val connection: Connection) {
     /** Add a link between a note and a tag */
     fun add(noteTag: NoteTag) {
-        val sql = """
+        val sql =
+            """
             INSERT INTO note_tags (note_id, tag_id, user_id) VALUES (?, ?, ?)
-        """.trimIndent()
+            """.trimIndent()
         connection.prepareStatement(sql).use { stmt ->
             stmt.setLong(1, noteTag.noteId)
             stmt.setLong(2, noteTag.tagId)
@@ -58,7 +59,10 @@ open class NoteTagRepository(private val connection: Connection) {
     }
 
     /** Delete a specific tag link for a note */
-    fun deleteByNoteIdAndTagId(noteId: Long, tagId: Long) {
+    fun deleteByNoteIdAndTagId(
+        noteId: Long,
+        tagId: Long,
+    ) {
         val sql = "DELETE FROM note_tags WHERE note_id = ? AND tag_id = ?"
         connection.prepareStatement(sql).use { stmt ->
             stmt.setLong(1, noteId)

@@ -9,7 +9,6 @@ import javax.crypto.spec.SecretKeySpec
  * Uses AES encryption with a centralized key to store and retrieve session data securely.
  */
 class SessionStorage(private val encryptionKey: String) {
-
     private val algorithm = "AES"
     private val cipherMode = "AES/ECB/PKCS5Padding"
 
@@ -17,7 +16,10 @@ class SessionStorage(private val encryptionKey: String) {
      * Stores a session token with the given key.
      * The token is encrypted before storage.
      */
-    fun store(key: String, token: String): Boolean {
+    fun store(
+        key: String,
+        token: String,
+    ): Boolean {
         return try {
             val encryptedToken = encrypt(token)
             // In production, use a proper database or cache (Redis, etc.)

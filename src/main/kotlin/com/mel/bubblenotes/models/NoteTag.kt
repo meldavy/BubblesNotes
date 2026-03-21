@@ -12,5 +12,7 @@ import java.util.UUID
 data class NoteTag(
     val noteId: Long,
     val tagId: Long,
-    val userId: @Serializable(with = UUIDSerializer::class) UUID
+    val userId:
+        @Serializable(with = UUIDSerializer::class)
+        UUID,
 )

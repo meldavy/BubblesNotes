@@ -7,11 +7,12 @@ fun main(args: Array<String>) {
 }
 
 fun Application.module() {
+    logEnvironmentVariables() // Log environment config early for startup visibility
     configureMonitoring()
     configureSerialization()
     configureDatabases()
-    configureDI()  // Configure dependency injection after databases
-    configureSecurity()  // Move security after DI so we can inject userRepository
+    configureDI() // Configure dependency injection after databases
+    configureSecurity() // Move security after DI so we can inject userRepository
     configureSockets()
     configureRouting()
 }

@@ -1,9 +1,9 @@
 package com.mel.bubblenotes.repositories
 
-import java.sql.Connection
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.sql.Connection
 
 /**
  * Repository for AI task queue operations.
@@ -19,7 +19,7 @@ open class AITaskRepository(private val connection: Connection) {
         PENDING,
         PROCESSING,
         COMPLETED,
-        FAILED
+        FAILED,
     }
 
     /**
@@ -29,7 +29,7 @@ open class AITaskRepository(private val connection: Connection) {
     data class AITaskResult(
         val aiTitle: String? = null,
         val aiSummary: String? = null,
-        val aiTags: List<String> = emptyList()
+        val aiTags: List<String> = emptyList(),
     )
 
     /**
@@ -38,10 +38,11 @@ open class AITaskRepository(private val connection: Connection) {
      * @return The generated task ID
      */
     fun create(noteId: Long): Long {
-        val sql = """
+        val sql =
+            """
             INSERT INTO ai_tasks (note_id, status)
             VALUES (?, 'pending')
-        """.trimIndent()
+            """.trimIndent()
 
         connection.prepareStatement(sql, java.sql.Statement.RETURN_GENERATED_KEYS).use { stmt ->
             stmt.setLong(1, noteId)
@@ -60,10 +61,11 @@ open class AITaskRepository(private val connection: Connection) {
      * @return The task or null if not found
      */
     fun findById(taskId: Long): AITask? {
-        val sql = """
+        val sql =
+            """
             SELECT id, note_id, status, result, error_message, started_at, completed_at, worker_id, locked_at, lock_timeout
             FROM ai_tasks WHERE id = ?
-        """.trimIndent()
+            """.trimIndent()
 
         connection.prepareStatement(sql).use { stmt ->
             stmt.setLong(1, taskId)
@@ -80,7 +82,7 @@ open class AITaskRepository(private val connection: Connection) {
                     completedAt = rs.getLongOrNull("completed_at"),
                     workerId = rs.getString("worker_id"),
                     lockedAt = rs.getLongOrNull("locked_at"),
-                    lockTimeout = rs.getLongOrNull("lock_timeout")
+                    lockTimeout = rs.getLongOrNull("lock_timeout"),
                 )
             }
             return null
@@ -94,14 +96,15 @@ open class AITaskRepository(private val connection: Connection) {
      */
     fun findPendingTasks(limit: Int = 10): List<AITask> {
         val currentTime = System.currentTimeMillis()
-        val sql = """
+        val sql =
+            """
             SELECT id, note_id, status, result, error_message, started_at, completed_at, worker_id, locked_at, lock_timeout
             FROM ai_tasks
             WHERE status = 'pending'
                OR (status = 'processing' AND locked_at + lock_timeout < ?)
             ORDER BY id ASC
             LIMIT $limit
-        """.trimIndent()
+            """.trimIndent()
 
         connection.prepareStatement(sql).use { stmt ->
             stmt.setLong(1, currentTime)
@@ -119,8 +122,8 @@ open class AITaskRepository(private val connection: Connection) {
                             completedAt = rs.getLongOrNull("completed_at"),
                             workerId = rs.getString("worker_id"),
                             lockedAt = rs.getLongOrNull("locked_at"),
-                            lockTimeout = rs.getLongOrNull("lock_timeout")
-                        )
+                            lockTimeout = rs.getLongOrNull("lock_timeout"),
+                        ),
                     )
                 }
             }
@@ -132,12 +135,17 @@ open class AITaskRepository(private val connection: Connection) {
      * @param taskId The task ID
      * @return true if updated, false if not found
      */
-    fun setProcessing(taskId: Long, workerId: String? = null, lockTimeout: Long = 300000): Boolean {
-        val sql = """
+    fun setProcessing(
+        taskId: Long,
+        workerId: String? = null,
+        lockTimeout: Long = 300000,
+    ): Boolean {
+        val sql =
+            """
             UPDATE ai_tasks
             SET status = 'processing', started_at = ?, worker_id = ?, locked_at = ?, lock_timeout = ?
             WHERE id = ? AND status = 'pending'
-        """.trimIndent()
+            """.trimIndent()
 
         connection.prepareStatement(sql).use { stmt ->
             stmt.setLong(1, System.currentTimeMillis())
@@ -155,12 +163,16 @@ open class AITaskRepository(private val connection: Connection) {
      * @param result The AI task result
      * @return true if updated, false if not found
      */
-    fun setCompleted(taskId: Long, result: AITaskResult): Boolean {
-        val sql = """
+    fun setCompleted(
+        taskId: Long,
+        result: AITaskResult,
+    ): Boolean {
+        val sql =
+            """
             UPDATE ai_tasks
             SET status = 'completed', result = ?, completed_at = ?
             WHERE id = ?
-        """.trimIndent()
+            """.trimIndent()
 
         connection.prepareStatement(sql).use { stmt ->
             stmt.setString(1, json.encodeToString(result))
@@ -176,12 +188,16 @@ open class AITaskRepository(private val connection: Connection) {
      * @param errorMessage The error message
      * @return true if updated, false if not found
      */
-    fun setFailed(taskId: Long, errorMessage: String): Boolean {
-        val sql = """
+    fun setFailed(
+        taskId: Long,
+        errorMessage: String,
+    ): Boolean {
+        val sql =
+            """
             UPDATE ai_tasks
             SET status = 'failed', error_message = ?, completed_at = ?
             WHERE id = ?
-        """.trimIndent()
+            """.trimIndent()
 
         connection.prepareStatement(sql).use { stmt ->
             stmt.setString(1, errorMessage)
@@ -198,11 +214,12 @@ open class AITaskRepository(private val connection: Connection) {
      * @return true if updated, false if not found
      */
     fun resetToPending(taskId: Long): Boolean {
-        val sql = """
+        val sql =
+            """
             UPDATE ai_tasks
             SET status = 'pending', error_message = NULL, locked_at = NULL, lock_timeout = NULL
             WHERE id = ?
-        """.trimIndent()
+            """.trimIndent()
 
         connection.prepareStatement(sql).use { stmt ->
             stmt.setLong(1, taskId)
@@ -252,5 +269,5 @@ data class AITask(
     val completedAt: Long? = null,
     val workerId: String? = null,
     val lockedAt: Long? = null,
-    val lockTimeout: Long? = null
+    val lockTimeout: Long? = null,
 )

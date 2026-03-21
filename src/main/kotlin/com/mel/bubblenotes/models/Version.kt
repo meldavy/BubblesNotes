@@ -8,9 +8,11 @@ import java.util.UUID
 data class Version(
     val id: Long,
     val noteId: Long,
-    val userId: @Serializable(with = UUIDSerializer::class) UUID,
+    val userId:
+        @Serializable(with = UUIDSerializer::class)
+        UUID,
     val title: String?,
     val content: String,
     val isPublished: Boolean,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
 )

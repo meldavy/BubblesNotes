@@ -11,12 +11,12 @@ data class AITask(
     var result: JsonObject? = null,
     var errorMessage: String? = null,
     var startedAt: Long? = null,
-    var completedAt: Long? = null
+    var completedAt: Long? = null,
 ) {
     enum class Status {
         PENDING,
         PROCESSING,
         COMPLETED,
-        FAILED
+        FAILED,
     }
 }

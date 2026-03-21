@@ -7,7 +7,9 @@ import java.util.UUID
 @Serializable
 data class Note(
     val id: Long,
-    val userId: @Serializable(with = UUIDSerializer::class) UUID,
+    val userId:
+        @Serializable(with = UUIDSerializer::class)
+        UUID,
     val title: String?,
     val content: String,
     val isPublished: Boolean,
@@ -19,5 +21,5 @@ data class Note(
     val lastVersionId: Long? = null,
     val previewData: String? = null, // JSON string containing URL previews
     val createdAt: Long = System.currentTimeMillis(),
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
 )

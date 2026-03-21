@@ -14,11 +14,13 @@ import java.util.UUID
 class TagService(
     private val noteTagRepository: NoteTagRepository,
     private val tagRepository: TagRepository,
-    private val noteRepository: NoteRepository
+    private val noteRepository: NoteRepository,
 ) {
-
     /** Create a new tag for a user, ensuring uniqueness per user. */
-    fun createTag(userId: UUID, name: String): Tag {
+    fun createTag(
+        userId: UUID,
+        name: String,
+    ): Tag {
         // Check if tag already exists
         val existing = tagRepository.findByNameAndUserId(name, userId)
         if (existing != null) return existing
@@ -31,7 +33,10 @@ class TagService(
     fun getTagsByUser(userId: UUID): List<Tag> = tagRepository.findByUserId(userId)
 
     /** Delete a tag owned by the user. */
-    fun deleteTag(tagId: Long, userId: UUID): Boolean {
+    fun deleteTag(
+        tagId: Long,
+        userId: UUID,
+    ): Boolean {
         val tag = tagRepository.findById(tagId) ?: return false
         if (tag.userId != userId) return false
         // Associations are removed via cascade or can be handled separately
@@ -39,7 +44,12 @@ class TagService(
     }
 
     /** Get notes that have a given tag name for the user. */
-    fun getNotesByTag(userId: UUID, tagName: String, limit: Int, cursor: Long?): List<Note> {
+    fun getNotesByTag(
+        userId: UUID,
+        tagName: String,
+        limit: Int,
+        cursor: Long?,
+    ): List<Note> {
         val tag = tagRepository.findByNameAndUserId(tagName, userId) ?: return emptyList()
         val noteIds = noteTagRepository.findNoteIdsByTagId(tag.id)
         if (noteIds.isEmpty()) return emptyList()

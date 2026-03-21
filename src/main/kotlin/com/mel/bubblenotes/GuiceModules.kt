@@ -16,6 +16,12 @@ import com.mel.bubblenotes.services.OpenAIClient
 import com.mel.bubblenotes.services.SessionStorage
 import com.mel.bubblenotes.services.TagService
 import com.mel.bubblenotes.services.URLPreviewService
+import com.mel.bubblenotes.api.aiEnhancementService
+import com.mel.bubblenotes.api.noteRepository
+import com.mel.bubblenotes.api.noteTagRepository
+import com.mel.bubblenotes.api.tagRepository
+import com.mel.bubblenotes.api.tagService
+import com.mel.bubblenotes.api.urlPreviewService
 import io.ktor.server.application.*
 import io.ktor.server.config.*
 import io.ktor.util.*
@@ -26,16 +32,18 @@ import io.ktor.util.*
  */
 class ApplicationModule(
     private val databaseService: DatabaseService,
-    private val config: ApplicationConfig
+    private val config: ApplicationConfig,
 ) : AbstractModule() {
-    
     /**
      * Helper function to get a config property with a required fallback.
      * This ensures critical properties are always available - either from config,
      * environment variables, or a required default that makes the server fail fast
      * if nothing is configured.
      */
-    private fun getRequiredConfigProperty(path: String, defaultValue: String = ""): String {
+    private fun getRequiredConfigProperty(
+        path: String,
+        defaultValue: String = "",
+    ): String {
         return try {
             config.property(path).getString()
         } catch (e: Exception) {
@@ -44,14 +52,14 @@ class ApplicationModule(
             System.getenv(envKey) ?: defaultValue
         }
     }
-    
+
     override fun configure() {
         // Bind services - config reads from application.yaml with env var fallbacks
         bind(EncryptionService::class.java).toInstance(
-            EncryptionService(getRequiredConfigProperty("encryption.key"))
+            EncryptionService(getRequiredConfigProperty("encryption.key")),
         )
         bind(SessionStorage::class.java).toInstance(
-            SessionStorage(getRequiredConfigProperty("encryption.session-key"))
+            SessionStorage(getRequiredConfigProperty("encryption.session-key")),
         )
         bind(ApiKeyService::class.java).toInstance(ApiKeyService())
     }
@@ -100,13 +108,13 @@ class ApplicationModule(
         val modelId = getRequiredConfigProperty("ai.openai.model-id")
         val summaryThreshold = getRequiredConfigProperty("ai.openai.summary-threshold").toIntOrNull() ?: 500
         val requestTimeout = getRequiredConfigProperty("ai.openai.request-timeout").toLongOrNull() ?: 120000L
-        
+
         return OpenAIClient(
             apiKey = apiKey,
             apiUrl = apiUrl,
             modelId = modelId,
             summaryThreshold = summaryThreshold,
-            requestTimeout = requestTimeout
+            requestTimeout = requestTimeout,
         )
     }
 
@@ -115,13 +123,14 @@ class ApplicationModule(
     fun provideAIEnhancementService(
         openAIClient: OpenAIClient,
         aiTaskRepository: AITaskRepository,
-        noteRepository: NoteRepository
+        noteRepository: NoteRepository,
     ): AIEnhancementService {
-        val service = AIEnhancementService(
-            openAIClient = openAIClient,
-            aiTaskRepository = aiTaskRepository,
-            noteRepository = noteRepository
-        )
+        val service =
+            AIEnhancementService(
+                openAIClient = openAIClient,
+                aiTaskRepository = aiTaskRepository,
+                noteRepository = noteRepository,
+            )
         // Start the scheduler
         service.start()
         return service
@@ -144,22 +153,23 @@ fun Application.configureDI() {
 
     // Initialize repositories from injector and set them for API routes
     val noteRepository = injector.getInstance(NoteRepository::class.java)
-    api.noteRepository = noteRepository
-    
+    com.mel.bubblenotes.api.noteRepository = noteRepository
+
     // Initialize URL preview service for API routes
-    api.urlPreviewService = URLPreviewService()
+    com.mel.bubblenotes.api.urlPreviewService = URLPreviewService()
 
     // Initialize NoteTagRepository for tag relationships
     val noteTagRepository = injector.getInstance(NoteTagRepository::class.java)
-    api.noteTagRepository = noteTagRepository
+    com.mel.bubblenotes.api.noteTagRepository = noteTagRepository
 
     // Initialize TagService
-    val tagService = TagService(noteTagRepository, injector.getInstance(TagRepository::class.java), injector.getInstance(NoteRepository::class.java))
-    api.tagService = tagService
+    val tagService =
+        TagService(noteTagRepository, injector.getInstance(TagRepository::class.java), injector.getInstance(NoteRepository::class.java))
+    com.mel.bubblenotes.api.tagService = tagService
 
     // Initialize AI Enhancement Service for API routes
     val aiEnhancementService = injector.getInstance(AIEnhancementService::class.java)
-    api.aiEnhancementService = aiEnhancementService
+    com.mel.bubblenotes.api.aiEnhancementService = aiEnhancementService
     environment.log.info("AI Enhancement Service initialized for API routes")
 
     // Log DI initialization

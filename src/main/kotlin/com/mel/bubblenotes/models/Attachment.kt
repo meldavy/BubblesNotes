@@ -8,11 +8,13 @@ import java.util.UUID
 data class Attachment(
     val id: Long,
     val noteId: Long,
-    val userId: @Serializable(with = UUIDSerializer::class) UUID,
+    val userId:
+        @Serializable(with = UUIDSerializer::class)
+        UUID,
     val fileName: String,
     val contentType: String,
     val fileSize: Long,
     val storagePath: String,
     val encryptedData: ByteArray? = null,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
 )

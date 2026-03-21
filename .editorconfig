@@ -1,0 +1,23 @@
+# Top-level .editorconfig
+root = true
+
+# Kotlin source files
+[*.{kt,kts}]
+end_of_line = lf
+charset = utf-8
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+# Gradle Kotlin scripts
+[build.gradle.kts]
+ij_kotlin_allow_trailing_comma = true
+
+# Source files
+[*.kt]
+ij_kotlin_allow_trailing_comma = true
+
+# Test files
+[src/test/kotlin/**/*.kt]
+ij_kotlin_allow_trailing_comma = true
