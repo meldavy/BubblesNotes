@@ -44,7 +44,8 @@ interface UserLookupService {
 // Session data for encrypted storage - must be serializable for Ktor sessions
 @kotlinx.serialization.Serializable
 data class UserSession(
-    val userId: String, // Changed from UUID to String for serialization
+    // Changed from UUID to String for serialization
+    val userId: String,
     val email: String,
     val oauthToken: String,
     val expiresAt: Long,
@@ -173,10 +174,59 @@ fun Application.configureSecurity(
         }
     }
 
-    // Install CORS plugin for cross-origin requests (frontend on different port during dev)
+    // Install CORS plugin for cross-origin requests
     install(CORS) {
-        anyHost()
+        // IMPORTANT: when allowCredentials = true, avoid anyHost().
+        // Read allowed origin from configuration (env var ORIGIN or application.yaml `origin`).
+        val originValue =
+            try {
+                config.property("origin").getString().trim()
+            } catch (e: Exception) {
+                this@configureSecurity.environment.log.warn("Origin not configured, using default for testing")
+                "http://localhost:8080"
+            }
+
+        if (originValue.isBlank()) {
+            this@configureSecurity.environment.log.warn("CORS ORIGIN is blank, using default for testing")
+        }
+
+        try {
+            val uri = java.net.URI(originValue)
+            val scheme = uri.scheme ?: throw IllegalArgumentException("ORIGIN must include scheme (http/https)")
+            // Prefer host; if absent (edge cases), try authority
+            val hostRaw = uri.host ?: uri.authority ?: throw IllegalArgumentException("ORIGIN must include host")
+            val port = uri.port
+            val hostForKtor =
+                if (port == -1 || (scheme == "http" && port == 80) || (scheme == "https" && port == 443)) {
+                    hostRaw
+                } else {
+                    "$hostRaw:$port"
+                }
+
+            allowHost(hostForKtor, schemes = listOf(scheme))
+            this@configureSecurity.environment.log.info("Configured CORS allowed origin: $scheme://$hostForKtor")
+        } catch (e: Exception) {
+            this@configureSecurity.environment.log.error("Invalid ORIGIN configuration '$originValue': ${e.message}")
+            throw e
+        }
+
         allowCredentials = true
+
+        // Allow the HTTP methods used by the frontend
+        allowMethod(HttpMethod.Options)
+        allowMethod(HttpMethod.Get)
+        allowMethod(HttpMethod.Post)
+        allowMethod(HttpMethod.Put)
+        allowMethod(HttpMethod.Delete)
+
+        // Allow JSON and other non-simple content types in requests
+        allowHeader(HttpHeaders.ContentType)
+        // If custom headers are used (e.g., Authorization/X-Requested-With), add them here:
+        // allowHeader(HttpHeaders.Authorization)
+        // allowHeader("X-Requested-With")
+
+        // Be explicit that non-simple content types are permitted (helps with preflight)
+        allowNonSimpleContentTypes = true
     }
 
     install(Authentication) {
@@ -426,10 +476,12 @@ fun Application.configureSecurity(
                 // Create session and store it using Ktor Sessions with the verified user
                 val sessionData =
                     UserSession(
-                        userId = finalUser.id.toString(), // Convert UUID to String
+                        // Convert UUID to String
+                        userId = finalUser.id.toString(),
                         email = finalUser.email,
                         oauthToken = idToken,
-                        expiresAt = System.currentTimeMillis() + 86400000, // 24 hours
+                        // 24 hours
+                        expiresAt = System.currentTimeMillis() + 86400000,
                     )
 
                 call.application.log.info(
@@ -506,8 +558,10 @@ fun Application.configureSecurity(
                         "authenticated" to true,
                         "userId" to userId,
                         "email" to (session?.email ?: ""),
-                        "name" to "", // Not stored in session - would need database lookup
-                        "pictureUrl" to "", // Not stored in session - would need database lookup
+                        // Not stored in session - would need database lookup
+                        "name" to "",
+                        // Not stored in session - would need database lookup
+                        "pictureUrl" to "",
                     ),
                 )
                 call.application.log.info("=== /api/v1/auth/me endpoint completed ===")

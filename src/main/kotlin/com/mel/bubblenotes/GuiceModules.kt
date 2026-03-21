@@ -3,6 +3,11 @@ package com.mel.bubblenotes
 import com.google.inject.AbstractModule
 import com.google.inject.Provides
 import com.google.inject.Singleton
+import com.mel.bubblenotes.api.aiEnhancementService
+import com.mel.bubblenotes.api.noteRepository
+import com.mel.bubblenotes.api.noteTagRepository
+import com.mel.bubblenotes.api.tagService
+import com.mel.bubblenotes.api.urlPreviewService
 import com.mel.bubblenotes.repositories.AITaskRepository
 import com.mel.bubblenotes.repositories.AttachmentRepository
 import com.mel.bubblenotes.repositories.NoteRepository
@@ -16,12 +21,6 @@ import com.mel.bubblenotes.services.OpenAIClient
 import com.mel.bubblenotes.services.SessionStorage
 import com.mel.bubblenotes.services.TagService
 import com.mel.bubblenotes.services.URLPreviewService
-import com.mel.bubblenotes.api.aiEnhancementService
-import com.mel.bubblenotes.api.noteRepository
-import com.mel.bubblenotes.api.noteTagRepository
-import com.mel.bubblenotes.api.tagRepository
-import com.mel.bubblenotes.api.tagService
-import com.mel.bubblenotes.api.urlPreviewService
 import io.ktor.server.application.*
 import io.ktor.server.config.*
 import io.ktor.util.*

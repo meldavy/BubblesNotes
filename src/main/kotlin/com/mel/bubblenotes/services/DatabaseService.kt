@@ -42,7 +42,14 @@ class DatabaseService(private val application: Application) {
                     jdbcUrl = application.environment.config.property("postgres.url").getString()
                     username = application.environment.config.property("postgres.user").getString()
                     password = application.environment.config.property("postgres.password").getString()
+                    // Essential for Docker/Long-running apps:
+                    maxLifetime = 600000     // 10 minutes (Docker friendly)
+                    keepaliveTime = 30000    // 30 seconds (Keeps the socket warm)
+
+                    // Performance & Stability:
                     maximumPoolSize = 10
+                    minimumIdle = 5
+                    connectionTimeout = 30000
                 }
             return HikariDataSource(config)
         }

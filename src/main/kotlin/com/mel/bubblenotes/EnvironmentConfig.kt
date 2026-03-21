@@ -7,36 +7,40 @@ import io.ktor.util.*
  * List of sensitive environment variable patterns that should be redacted in logs.
  * These patterns are matched case-insensitively against variable names.
  */
-private val SENSITIVE_PATTERNS = listOf(
-    "KEY",
-    "SECRET",
-    "PASSWORD",
-    "TOKEN",
-    "CREDENTIAL",
-)
+private val SENSITIVE_PATTERNS =
+    listOf(
+        "KEY",
+        "SECRET",
+        "PASSWORD",
+        "TOKEN",
+        "CREDENTIAL",
+    )
 
 /**
  * Maps configuration keys to their environment variable names for logging purposes.
  * This provides visibility into critical configuration at startup.
  */
-private val CONFIG_TO_ENV_MAP = mapOf(
-    "ktor.deployment.port" to "PORT",
-    "db.url" to "DB_URL",
-    "db.user" to "DB_USER",
-    "db.password" to "DB_PASSWORD",
-    "db.pool-size" to "DB_POOL_SIZE",
-    "db.min-idle" to "DB_MIN_IDLE",
-    "encryption.key" to "ENCRYPTION_KEY",
-    "encryption.session-key" to "SESSION_ENCRYPTION_KEY",
-    "oauth.google.client-id" to "GOOGLE_CLIENT_ID",
-    "oauth.google.client-secret" to "GOOGLE_CLIENT_SECRET",
-    "oauth.google.redirect-uri" to "GOOGLE_REDIRECT_URI",
-    "ai.openai.api-key" to "OPENAI_API_KEY",
-    "ai.openai.api-url" to "OPENAI_API_URL",
-    "ai.openai.model-id" to "OPENAI_MODEL_ID",
-    "ai.openai.summary-threshold" to "AI_SUMMARY_THRESHOLD",
-    "ai.openai.request-timeout" to "AI_REQUEST_TIMEOUT",
-)
+private val CONFIG_TO_ENV_MAP =
+    mapOf(
+        "ktor.deployment.port" to "PORT",
+        "db.url" to "DB_URL",
+        "db.user" to "DB_USER",
+        "db.password" to "DB_PASSWORD",
+        "db.pool-size" to "DB_POOL_SIZE",
+        "db.min-idle" to "DB_MIN_IDLE",
+        "encryption.key" to "ENCRYPTION_KEY",
+        "encryption.session-key" to "SESSION_ENCRYPTION_KEY",
+        "oauth.google.client-id" to "GOOGLE_CLIENT_ID",
+        "oauth.google.client-secret" to "GOOGLE_CLIENT_SECRET",
+        "oauth.google.redirect-uri" to "GOOGLE_REDIRECT_URI",
+        "ai.openai.api-key" to "OPENAI_API_KEY",
+        "ai.openai.api-url" to "OPENAI_API_URL",
+        "ai.openai.model-id" to "OPENAI_MODEL_ID",
+        "ai.openai.summary-threshold" to "AI_SUMMARY_THRESHOLD",
+        "ai.openai.request-timeout" to "AI_REQUEST_TIMEOUT",
+        // CORS allowed origin (full URL)
+        "origin" to "ORIGIN",
+    )
 
 /**
  * Determines if a configuration key or environment variable name contains sensitive information.
@@ -85,17 +89,19 @@ fun Application.logEnvironmentVariables() {
 
     // Log each critical configuration value
     CONFIG_TO_ENV_MAP.forEach { (configKey, envVarName) ->
-        val value = try {
-            config.property(configKey).getString()
-        } catch (e: Exception) {
-            null
-        }
+        val value =
+            try {
+                config.property(configKey).getString()
+            } catch (e: Exception) {
+                null
+            }
 
-        val displayValue = when {
-            value == null -> "*** (config error)"
-            isSensitive(configKey) -> redactValue(value)
-            else -> value
-        }
+        val displayValue =
+            when {
+                value == null -> "*** (config error)"
+                isSensitive(configKey) -> redactValue(value)
+                else -> value
+            }
 
         log.info("  $envVarName: $displayValue")
 
@@ -107,6 +113,10 @@ fun Application.logEnvironmentVariables() {
                     missingCriticalVars.add(envVarName)
                 }
                 "ai.openai.api-key" -> {
+                    missingCriticalVars.add(envVarName)
+                }
+                // Require explicit origin in production; default exists for dev but warn if empty/misconfigured
+                "origin" -> {
                     missingCriticalVars.add(envVarName)
                 }
                 "encryption.key", "encryption.session-key" -> {

@@ -541,7 +541,7 @@ export const Dashboard: React.FC = () => {
             {/* Header */}
             <Header title="BubblesNotes" showAuth={false} />
 
-            <main className="max-w-7xl mx-auto px-4 py-6">
+            <main className="max-w-7xl mx-auto px-4 py-6 pb-20 md:pb-6">
                 {/* Quick Note Editor - Sticky at top */}
                 <section className="mb-8 animate-slide-up">
                     <NoteEditor

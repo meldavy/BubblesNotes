@@ -24,7 +24,8 @@ class AIEnhancementService(
     private val aiTaskRepository: AITaskRepository,
     private val noteRepository: NoteRepository,
     private val schedulerScope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
-    private val schedulerIntervalMs: Long = 30000, // 30 seconds default
+    // 30 seconds default
+    private val schedulerIntervalMs: Long = 30000,
     private val workerId: String = "worker-${ProcessHandle.current().pid()}-${Thread.currentThread().id}",
 ) {
     companion object {

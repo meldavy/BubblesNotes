@@ -1,3 +1,6 @@
+import java.time.format.DateTimeFormatter
+import java.time.LocalDateTime
+
 val h2_version: String by project
 val kotlin_version: String by project
 val logback_version: String by project
@@ -9,10 +12,44 @@ plugins {
     id("io.ktor.plugin") version "3.4.1"
     id("org.jetbrains.kotlin.plugin.serialization") version "2.3.0"
     id("org.jlleitschuh.gradle.ktlint") version "12.1.0"
+    id("com.google.cloud.tools.jib") version "3.4.1"
 }
 
 group = "com.mel.bubblenotes"
 version = "0.0.1"
+
+// Configure Docker image name with timestamp
+val timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm-ss"))
+
+ktor {
+    docker {
+        // Use project name as image base name
+        localImageName.set("bubbles-notes")
+        // Append timestamp to the tag (format: yyyy-MM-dd-HH-mm-ss)
+        imageTag.set(timestamp)
+    }
+}
+
+// Jib configuration for multi-architecture Docker images
+jib {
+    from {
+        image = "eclipse-temurin:17-jre-alpine"
+        platforms {
+            platform {
+                architecture = "arm64"
+                os = "linux"
+            }
+        }
+    }
+    to {
+        image = "bubbles-notes"
+        tags = setOf(timestamp, "latest")
+    }
+    container {
+        jvmFlags = listOf("-Dio.ktor.development=false")
+        ports = listOf("8080")
+    }
+}
 
 application {
     mainClass = "io.ktor.server.netty.EngineMain"
@@ -87,8 +124,9 @@ dependencies {
     implementation("io.ktor:ktor-server-config-yaml:$ktor_version")
     // Guice dependency injection
     implementation("com.google.inject:guice:5.1.0")
-    // Flyway for database migrations (H2 support is bundled with flyway-core)
+    // Flyway for database migrations - PostgreSQL support requires separate module
     implementation("org.flywaydb:flyway-core:10.17.1")
+    implementation("org.flywaydb:flyway-database-postgresql:10.17.1")
     implementation("com.h2database:h2:2.3.232")
     // Google OAuth client
     implementation("com.google.api-client:google-api-client:2.6.0")

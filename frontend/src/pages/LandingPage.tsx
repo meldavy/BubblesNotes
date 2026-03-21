@@ -26,9 +26,11 @@ export const LandingPage: React.FC = () => {
         <div className="text-center max-w-3xl mx-auto">
           {/* Logo/Icon */}
           <div className="mb-8 flex justify-center">
-            <div className="bg-blue-600 rounded-full p-4 shadow-lg">
-              <DocumentTextIcon className="h-16 w-16 text-white" />
-            </div>
+            <img
+              src="/bubblesnotes.png"
+              alt="BubblesNotes Logo"
+              className="h-16 w-16 rounded-full object-cover shadow-lg"
+            />
           </div>
 
           {/* Main Heading */}
@@ -43,7 +45,7 @@ export const LandingPage: React.FC = () => {
           </p>
 
           {/* CTA Button */}
-          <div className="mb-12">
+          <div className="mb-12 flex justify-center">
             <LoginButton />
           </div>
 

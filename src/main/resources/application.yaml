@@ -35,3 +35,9 @@ ai:
     model-id: ${OPENAI_MODEL_ID:}
     summary-threshold: ${AI_SUMMARY_THRESHOLD:500}
     request-timeout: ${AI_REQUEST_TIMEOUT:300000}
+
+
+# CORS allowed origin (full URL). Must be set for production deployments.
+# Example: https://notes.example.com
+# Default points to localhost for development.
+origin: ${ORIGIN:http://127.0.0.1:8080}

@@ -35,7 +35,8 @@ data class URLPreview(
  */
 open class URLPreviewService(
     private val httpClient: HttpClient = createDefaultHttpClient(),
-    private val cacheDurationMs: Long = 24 * 60 * 60 * 1000L, // 24 hours
+    // 24 hours
+    private val cacheDurationMs: Long = 24 * 60 * 60 * 1000L,
 ) {
     private val cache = ConcurrentHashMap<String, CacheEntry>()
 
@@ -281,5 +282,4 @@ open class URLPreviewService(
             text
         }
     }
-
 }

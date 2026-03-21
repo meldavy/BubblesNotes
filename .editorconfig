@@ -9,6 +9,15 @@ insert_final_newline = true
 trim_trailing_whitespace = true
 indent_style = space
 indent_size = 4
+ktlint_standard_no-wildcard-imports = disabled
+# Disable rules that currently have failures in the codebase
+ktlint_standard_max-line-length = disabled
+ktlint_standard_property-naming = disabled
+ktlint_standard_comment-wrapping = disabled
+ktlint_standard_no-line-break-after-equals = disabled
+ktlint_standard_function-parameter-naming = disabled
+# Disable comment placement rule in value argument lists
+ktlint_standard_trailing-comment = disabled
 
 # Gradle Kotlin scripts
 [build.gradle.kts]

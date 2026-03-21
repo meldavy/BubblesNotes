@@ -19,7 +19,8 @@ data class Note(
     val aiSummary: String? = null,
     val aiTags: List<String>? = null,
     val lastVersionId: Long? = null,
-    val previewData: String? = null, // JSON string containing URL previews
+    // JSON string containing URL previews
+    val previewData: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
 )
