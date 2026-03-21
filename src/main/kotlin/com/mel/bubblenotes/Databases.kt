@@ -56,6 +56,14 @@ fun Application.configureDatabases() {
             password = dbPassword
             maximumPoolSize = dbPoolSize
             minimumIdle = dbMinIdle
+            // Connection validation - test query before returning connection from pool
+            connectionTestQuery = "SELECT 1"
+            // Max lifetime of a connection (30 minutes) - should be less than DB server timeout
+            maxLifetime = 1800000L
+            // Idle timeout (10 minutes) - remove idle connections proactively
+            idleTimeout = 600000L
+            // Connection timeout (30 seconds) - fail fast if pool is exhausted
+            connectionTimeout = 30000L
         }
 
     val dataSource = HikariDataSource(hikariConfig)
