@@ -3,6 +3,7 @@ package com.mel.bubblenotes
 import com.fasterxml.jackson.databind.*
 import com.mel.bubblenotes.api.notesApi
 import com.mel.bubblenotes.api.tagsApi
+import com.mel.bubblenotes.api.searchApi
 import io.ktor.http.*
 import io.ktor.resources.*
 import io.ktor.serialization.jackson.*
@@ -55,6 +56,8 @@ fun Application.configureRouting() {
         notesApi()
         // Tags API
         tagsApi()
+        // Search API
+        searchApi()
         
         get<Articles> { article ->
             call.respond("List of articles sorted starting from ${article.sort}")

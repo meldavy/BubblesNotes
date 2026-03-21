@@ -10,6 +10,9 @@ export interface TagChipProps {
   /** Callback when remove button is clicked */
   onRemove?: () => void;
   
+  /** Whether this tag is AI-generated (uses accent color) */
+  isAiGenerated?: boolean;
+  
   /** Additional CSS classes */
   className?: string;
 }
@@ -24,11 +27,13 @@ export interface TagChipProps {
  * - Font: 12px (text-xs)
  * - Border radius: 4px
  * - Subtle border for visual separation
+ * - AI-generated tags use accent/purple color for distinction
  */
 export const TagChip: React.FC<TagChipProps> = ({
   label,
   removable = false,
   onRemove,
+  isAiGenerated = false,
   className = '',
 }) => {
   const handleRemove = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -37,16 +42,27 @@ export const TagChip: React.FC<TagChipProps> = ({
     onRemove?.();
   };
 
+  // Use accent color for AI-generated tags, neutral for user tags
+  const chipClasses = isAiGenerated
+    ? `
+        bg-accent-purple-50
+        text-accent-purple-700
+        inset-ring-inset-ring-accent-purple-200
+      `
+    : `
+        bg-neutral-400/10
+        text-neutral-400
+        inset-ring-inset-ring-neutral-400/20
+      `;
+
   return (
     <span
       className={`
         inline-flex items-center gap-1
         rounded-md
-        bg-neutral-400/10
         px-2 py-1
         text-xs font-medium
-        text-neutral-400
-        inset-ring inset-ring-neutral-400/20
+        ${chipClasses}
         ${className}
       `}
     >

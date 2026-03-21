@@ -12,31 +12,44 @@ class DatabaseService(private val dataSource: HikariDataSource) {
 }
 
 fun Application.configureDatabases() {
-    // Get database config with fallback to system properties and defaults for testing
+    val config = environment.config
+    
+    // Get database config from application.yaml with fallbacks for testing
+    // Environment variables can override via ${ENV_VAR:default} syntax in YAML
     val dbUrl = try {
-        environment.config.property("db.url").getString()
+        config.property("db.url").getString()
     } catch (e: Exception) {
-        // Use file-based H2 database for development to ensure data persists across connections
-        // In-memory H2 databases are connection-scoped by default, causing foreign key issues
-        System.getProperty("db.url") ?: System.getenv("DB_URL") ?: "jdbc:h2:file:./data/bubblesnotes;DB_CLOSE_DELAY=-1;MODE=PostgreSQL"
+        // Fallback for testing when config is not available
+        environment.log.warn("db.url not found in config, using H2 in-memory database for testing")
+        "jdbc:h2:mem:test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL"
     }
     val dbUser = try {
-        environment.config.property("db.user").getString()
+        config.property("db.user").getString()
     } catch (e: Exception) {
-        System.getProperty("db.user") ?: System.getenv("DB_USER") ?: "sa"
+        "sa"
     }
     val dbPassword = try {
-        environment.config.property("db.password").getString()
+        config.property("db.password").getString()
     } catch (e: Exception) {
-        System.getProperty("db.password") ?: System.getenv("DB_PASSWORD") ?: ""
+        ""
+    }
+    val dbPoolSize = try {
+        config.property("db.pool-size").getString().toIntOrNull() ?: 10
+    } catch (e: Exception) {
+        10
+    }
+    val dbMinIdle = try {
+        config.property("db.min-idle").getString().toIntOrNull() ?: 2
+    } catch (e: Exception) {
+        2
     }
     
     val hikariConfig = HikariConfig().apply {
         jdbcUrl = dbUrl
         username = dbUser
         password = dbPassword
-        maximumPoolSize = 10
-        minimumIdle = 2
+        maximumPoolSize = dbPoolSize
+        minimumIdle = dbMinIdle
     }
     
     val dataSource = HikariDataSource(hikariConfig)

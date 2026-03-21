@@ -37,7 +37,7 @@ interface MarkdownPreviewProps {
  */
 export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
     content,
-    maxLines = 3,
+    maxLines,
     className = '',
     showURLPreviews = false,
     urlPreviews = []
@@ -58,7 +58,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
             <h3 className="text-base font-semibold text-neutral-700 mb-1" {...props}>{children}</h3>
         ),
         p: ({ children, ...props }) => (
-            <p className="mb-2 text-neutral-600 leading-relaxed" {...props}>{children}</p>
+            <p className="mb-2 text-neutral-600 leading-relaxed break-words" {...props}>{children}</p>
         ),
         ul: ({ children, ...props }) => (
             <ul className="list-disc list-inside mb-2 space-y-1" {...props}>{children}</ul>
@@ -67,22 +67,36 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
             <ol className="list-decimal list-inside mb-2 space-y-1" {...props}>{children}</ol>
         ),
         li: ({ children, ...props }) => (
-            <li className="text-neutral-600" {...props}>{children}</li>
+            <li className="text-neutral-600 break-words" {...props}>{children}</li>
         ),
         blockquote: ({ children, ...props }) => (
-            <blockquote className="border-l-4 border-primary-300 pl-3 my-2 italic text-neutral-600" {...props}>{children}</blockquote>
+            <blockquote className="border-l-4 border-primary-300 pl-3 my-2 italic text-neutral-600 break-words" {...props}>{children}</blockquote>
         ),
-        code: ({ children, ...props }) => (
-            <code className="bg-neutral-200 px-1 py-0.5 rounded text-sm font-mono text-neutral-800" {...props}>{children}</code>
-        ),
-        pre: ({ children, ...props }) => (
-            <pre className="bg-neutral-800 text-neutral-100 p-3 rounded-lg overflow-x-auto my-2 text-sm" {...props}>{children}</pre>
-        ),
+        code: ({ children, className, ...props }) => {
+            // Check if this is a code block (has language class) - render without background
+            if (className?.match(/language-\w+/)) {
+                return (
+                    <code className="font-mono text-sm break-words text-inherit" {...props}>{children}</code>
+                );
+            }
+            // Inline code - use the original styling
+            return (
+                <code className="bg-neutral-200 px-1 py-0.5 rounded text-sm font-mono text-neutral-800 break-words" {...props}>{children}</code>
+            );
+        },
+        pre: ({ children, ...props }) => {
+            // For code blocks, add a custom class to enable CSS override
+            return (
+                <pre className="bg-neutral-800 text-neutral-100 p-3 rounded-lg overflow-x-auto my-2 text-sm code-block" {...props}>
+                    {children}
+                </pre>
+            );
+        },
         a: ({ href, children, ...props }) => (
-            <a 
-                href={href} 
-                className="text-primary-600 hover:text-primary-700 underline" 
-                target="_blank" 
+            <a
+                href={href}
+                className="text-primary-600 hover:text-primary-700 underline break-words"
+                target="_blank"
                 rel="noopener noreferrer"
                 {...props}
             >
@@ -95,34 +109,42 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
             </div>
         ),
         th: ({ children, ...props }) => (
-            <th className="border border-neutral-300 px-3 py-1.5 bg-neutral-100 font-semibold text-sm" {...props}>{children}</th>
+            <th className="border border-neutral-300 px-3 py-1.5 bg-neutral-100 font-semibold text-sm break-words" {...props}>{children}</th>
         ),
         td: ({ children, ...props }) => (
-            <td className="border border-neutral-300 px-3 py-1.5 text-sm" {...props}>{children}</td>
+            <td className="border border-neutral-300 px-3 py-1.5 text-sm break-words" {...props}>{children}</td>
         ),
         hr: (props) => <hr className="my-3 border-neutral-300" {...props} />,
     };
 
-    // Apply line clamp style for truncation
-    const lineClampStyle = {
-        display: '-webkit-box',
-        WebkitLineClamp: maxLines,
-        WebkitBoxOrient: 'vertical' as const,
-        overflow: 'hidden',
-    };
-
     return (
-        <div 
-            className={`markdown-preview ${className}`}
-            style={lineClampStyle}
-        >
-            <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                rehypePlugins={[rehypeSanitize]}
-                components={markdownComponents}
-            >
-                {content}
-            </ReactMarkdown>
+        <div className={`markdown-preview break-words ${className}`}>
+            {maxLines !== undefined ? (
+                <div
+                    style={{
+                        display: '-webkit-box',
+                        WebkitLineClamp: maxLines,
+                        WebkitBoxOrient: 'vertical' as const,
+                        overflow: 'hidden',
+                    }}
+                >
+                    <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        rehypePlugins={[rehypeSanitize]}
+                        components={markdownComponents}
+                    >
+                        {content}
+                    </ReactMarkdown>
+                </div>
+            ) : (
+                <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    rehypePlugins={[rehypeSanitize]}
+                    components={markdownComponents}
+                >
+                    {content}
+                </ReactMarkdown>
+            )}
             
             {/* URL Preview Cards - shown only when enabled and previews are available */}
             {showURLPreviews && urlPreviews && urlPreviews.length > 0 && (

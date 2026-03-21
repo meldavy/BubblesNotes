@@ -25,3 +25,12 @@ oauth:
     client-secret: "test-client-secret"
     redirect-uri: "http://localhost:8080/auth/google/callback"
     scopes: "email,profile"
+
+# OpenAI AI enhancement configuration (test values)
+ai:
+  openai:
+    api-key: "test-openai-api-key"
+    api-url: "http://192.168.1.223:11434/v1"
+    model-id: "qwen3.5:35b-a3b"
+    summary-threshold: 500
+    request-timeout: 10000

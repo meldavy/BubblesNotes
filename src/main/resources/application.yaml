@@ -16,5 +16,22 @@ db:
 
 # Encryption settings (defaults for development, MUST be set in production)
 encryption:
-  key: ${ENCRYPTION_KEY:dev-encryption-key-do-not-use-in-production}
-  session-key: ${SESSION_ENCRYPTION_KEY:dev-session-key-do-not-use-in-production}
+  key: ${ENCRYPTION_KEY:dev-encryption-key-do-not-use-in-production!!}
+  session-key: ${SESSION_ENCRYPTION_KEY:dev-session-key-48bytes-for-aes-gcm-!!!!!!!!!!!!}
+
+# Google OAuth configuration
+oauth:
+  google:
+    client-id: ${GOOGLE_CLIENT_ID:}
+    client-secret: ${GOOGLE_CLIENT_SECRET:}
+    redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:8080/auth/google/callback}
+    scopes: email,profile
+
+# OpenAI AI enhancement configuration
+ai:
+  openai:
+    api-key: ${OPENAI_API_KEY:}
+    api-url: ${OPENAI_API_URL:}
+    model-id: ${OPENAI_MODEL_ID:}
+    summary-threshold: ${AI_SUMMARY_THRESHOLD:500}
+    request-timeout: ${AI_REQUEST_TIMEOUT:300000}

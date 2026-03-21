@@ -86,9 +86,21 @@ pre {
 }
 
 pre code {
-  background-color: transparent;
-  padding: 0;
-  color: inherit;
+  background-color: transparent !important;
+  padding: 0 !important;
+  color: inherit !important;
+  border-radius: 0 !important;
+}
+
+/* Markdown Preview specific code block styling */
+.markdown-preview pre code,
+pre.code-block code {
+  background-color: transparent !important;
+  padding: 0 !important;
+  color: inherit !important;
+  border-radius: 0 !important;
+  font-size: inherit !important;
+  box-shadow: none !important;
 }
 
 /* ========================================

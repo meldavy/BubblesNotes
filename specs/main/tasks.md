@@ -433,18 +433,17 @@ gradlew.bat compileKotlin --console=plain
 
 ### Implementation Tasks
 
-- [ ] T085 [US6] Create Tag entity model with user_id and name (unique per user)
-- [ ] T086 [US6] Create NoteTag join table for many-to-many relationship
-- [ ] T087 [US6] Add tag management API endpoints in `src/main/kotlin/api/TagsApi.kt`
-- [ ] T088 [US6] Implement tag filtering query for note listing
-- [ ] T089 [US6] Create Tag entity service in `src/main/kotlin/services/tag_service.kt`
+- [x] T085 [US6] Create Tag entity model with user_id and name (unique per user)
+- [x] T086 [US6] Create NoteTag join table for many-to-many relationship
+- [x] T087 [US6] Add tag management API endpoints in `src/main/kotlin/api/TagsApi.kt`
+- [x] T088 [US6] Implement tag filtering query for note listing
+- [x] T089 [US6] Create Tag entity service in `src/main/kotlin/services/tag_service.kt`
 
 ### UI/UX Tasks
 
-- [ ] T090 [US6] Create React ChipInput component in `frontend/src/components/ChipInput.tsx`
-- [ ] T091 [US6] Implement chip input interface (type tag name + Enter to add)
-- [ ] T092 [US6] Display tags as clickable chips on note cards
-- [ ] T093 [US6] Add tag filter dropdown in dashboard for filtering notes by tag
+- [x] T090 [US6] Create React ChipInput component in `frontend/src/components/ChipInput.tsx`
+- [x] T091 [US6] Implement chip input interface (type tag name + Enter to add)
+- [x] T092 [US6] Display tags as clickable chips on note cards
 
 ---
 
@@ -456,39 +455,72 @@ gradlew.bat compileKotlin --console=plain
 
 ### Implementation Tasks
 
-- [ ] T094 [US7] Add tsvector column to notes table for full-text search
-- [ ] T095 [US7] Create PostgreSQL GIN index on search_vector
-- [ ] T096 [US7] Implement search API endpoint POST `/api/v1/search` in `src/main/kotlin/api/SearchApi.kt`
-- [ ] T097 [US7] Add tag name matching to search query
-- [ ] T098 [US7] Add attachment filename matching to search query
+- [x] T094 [US7] Add tsvector column to notes table for full-text search
+- [x] T095 [US7] Create PostgreSQL GIN index on search_vector
+- [x] T096 [US7] Implement search API endpoint POST `/api/v1/search` in `src/main/kotlin/api/SearchApi.kt`
+- [x] T097 [US7] Add tag name matching to search query
+- [x] T098 [US7] Add attachment filename matching to search query (OMITTED - attachment feature deprioritized)
 
 ### UI/UX Tasks
 
-- [ ] T099 [US7] Create React SearchBar component in `frontend/src/components/SearchBar.tsx`
-- [ ] T100 [US7] Display search results with snippet highlighting
-- [ ] T101 [US7] Add search query parameter to note listing API
+- [x] T093 [US6] Add tag filter dropdown in dashboard for filtering notes by tag
+- [x] T099 [US7] Create React SearchBar component in `frontend/src/components/SearchBar.tsx`
+- [x] T100 [US7] Display search results with snippet highlighting
+- [x] T101 [US7] Add search query parameter to note listing API
 
 ---
 
 ## Phase 13: User Story 8 - AI-Powered Note Enhancement (Priority: P4)
 
-**Goal**: Automatically generate summaries, titles, and tag suggestions using AI
+**Goal**: Automatically generate summaries, titles, and tags using AI as a background enhancer
 
-**Independent Test**: After saving a note, an AI-generated title and summary appear, and tags are suggested based on content.
+**Requirements**:
+- **AI Summary Threshold**: AI summarization should ONLY be triggered for notes exceeding a configurable character/word threshold (default: 500 characters). Short notes don't benefit from summarization.
+- **AI Tag Generation**: The AI must:
+  - Receive context of the user's existing tag set
+  - Prioritize reusing existing tags when they match the content
+  - Only generate NEW tags if they would be generally applicable (not overly narrow/specific)
+  - Tags are applied silently in the background - no user interaction required
+- **AI Tag Visual Distinction**: AI-generated tags must be displayed with a different color chip (e.g., accent/purple) to visually distinguish them from user-created tags
+- **Background Processing**: AI enhancements happen silently in the background. Users see enhancements when they revisit notes - no pending status or real-time suggestions.
+
+**Configuration** (via environment variables):
+- `OPENAI_API_KEY`: OpenAI API key (required for production)
+- `OPENAI_API_URL`: Custom API URL (optional, defaults to OpenAI endpoint)
+- `OPENAI_MODEL_ID`: Model to use (default: `gpt-4o-mini` for cost efficiency)
+- `AI_SUMMARY_THRESHOLD`: Minimum character count for summary generation (default: 500)
+
+**Independent Test**: After saving a note longer than 500 characters and revisiting later, AI-generated title, summary, and tags appear silently on the note.
 
 ### Implementation Tasks
 
-- [ ] T102 [US8] Create AI task queue table (ai_tasks) for async processing
-- [ ] T103 [US8] Implement OpenAI API client in `src/main/kotlin/services/openai_client.kt`
-- [ ] T104 [US8] Add async job scheduler to process pending AI tasks
-- [ ] T105 [US8] Update Note entity with ai_title, ai_summary, ai_tags fields
-- [ ] T106 [US8] Implement graceful degradation when AI service unavailable
+- [x] T102 [US8] Create AI task queue table (ai_tasks) for async processing (already in V1__Schema.sql)
+- [x] T103 [US8] Implement OpenAI API client in `src/main/kotlin/services/OpenAIClient.kt` with configurable URL, API key, and model ID from environment variables
+- [x] T104 [US8] Add async job scheduler to process pending AI tasks (in AIEnhancementService)
+- [x] T105 [US8] Update Note entity with ai_title, ai_summary, ai_tags fields (already in schema)
+- [x] T106 [US8] Implement graceful degradation when AI service unavailable (in OpenAIClient)
+- [x] T137 [US8] Add OpenAI configuration to `application.yaml` (api-key, api-url, model-id, summary-threshold)
+
+### AI Service Tasks
+- [x] T143 [US8] Create AI enhancement service (`src/main/kotlin/services/AIEnhancementService.kt`) to orchestrate AI tasks
+- [x] T144 [US8] Create AITaskRepository (`src/main/kotlin/com/mel/bubblenotes/repositories/AITaskRepository.kt`) for database operations
+
+### AI Prompt Design Tasks
+
+- [x] T138 [US8] Design AI summary prompt with character threshold check (only summarize notes > 500 chars)
+- [x] T139 [US8] Design AI tag suggestion prompt that includes user's existing tags and prioritizes reuse
+- [-] T140 [US8] Implement tag normalization and deduplication logic for AI-suggested tags
 
 ### UI/UX Tasks
 
-- [ ] T107 [US8] Display AI-generated title and summary in note view
-- [ ] T108 [US8] Show pending status indicator while AI processing
-- [ ] T109 [US8] Add tag suggestions as clickable chips
+- [x] T107 [US8] Display AI-generated title and summary in note view (when available)
+  - AI title shown as fallback when user title is empty
+  - AI summary shown in accent-colored box when available
+- [x] T109 [US8] Display AI-generated tags with visual distinction (different color chip) on note cards
+  - AI tags use accent/purple color via `isAiGenerated` prop on TagChip
+- [x] T141 [US8] Reuse existing TagChip component with `isAiGenerated` prop for AI tags
+
+**Note**: AI processing is a background task - no pending status indicator or suggestion UI needed. AI enhancements (title, summary, tags) appear silently when available.
 
 ---
 
@@ -500,16 +532,16 @@ gradlew.bat compileKotlin --console=plain
 
 ### Implementation Tasks
 
-- [ ] T110 [US9] Implement cursor-based pagination in note listing API
-- [ ] T111 [US9] Add next_cursor token to paginated responses
-- [ ] T112 [US9] Create client-side cache for loaded notes in React
-- [ ] T113 [US9] Implement IntersectionObserver for scroll detection
+- [x] T110 [US9] Implement cursor-based pagination in note listing API
+- [x] T111 [US9] Add next_cursor token to paginated responses
+- [ ] T112 [US9] Create client-side cache for loaded notes in React (optional - basic state-based caching exists)
+- [x] T113 [US9] Implement IntersectionObserver for scroll detection
 
 ### UI/UX Tasks
 
-- [ ] T114 [US9] Create React InfiniteScroll component in `frontend/src/components/InfiniteScroll.tsx`
-- [ ] T115 [US9] Add loading spinner while fetching next page
-- [ ] T116 [US9] Preserve scrolled position when new notes load
+- [x] T114 [US9] Create React InfiniteScroll component in `frontend/src/components/InfiniteScroll.tsx`
+- [x] T115 [US9] Add loading spinner while fetching next page
+- [x] T116 [US9] Preserve scrolled position when new notes load
 
 ---
 

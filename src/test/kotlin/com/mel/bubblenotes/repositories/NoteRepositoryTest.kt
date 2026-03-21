@@ -262,4 +262,253 @@ class NoteRepositoryTest {
             teardown()
         }
     }
+
+    @Test
+    fun testSearchByUserId_SearchesTitle() = runBlocking {
+        setup()
+        try {
+            val userId = UUID.randomUUID()
+            val now = System.currentTimeMillis()
+            
+            // Create notes with different titles
+            val note1 = Note(
+                id = 0,
+                userId = userId,
+                title = "Meeting Notes",
+                content = "Discussion about project",
+                isPublished = true,
+                createdAt = now,
+                updatedAt = now
+            )
+            val note2 = Note(
+                id = 0,
+                userId = userId,
+                title = "Shopping List",
+                content = "Milk, eggs, bread",
+                isPublished = true,
+                createdAt = now + 1,
+                updatedAt = now + 1
+            )
+            val note3 = Note(
+                id = 0,
+                userId = userId,
+                title = "Random Thoughts",
+                content = "Some random content",
+                isPublished = true,
+                createdAt = now + 2,
+                updatedAt = now + 2
+            )
+            noteRepository.create(note1)
+            noteRepository.create(note2)
+            noteRepository.create(note3)
+
+            // Search for "meeting" in title
+            val results = noteRepository.searchByUserId(userId, "meeting", limit = 10)
+            assertEquals(1, results.size, "Should find exactly 1 note matching 'meeting'")
+            assertEquals("Meeting Notes", results[0].title)
+        } finally {
+            teardown()
+        }
+    }
+
+    @Test
+    fun testSearchByUserId_SearchesContent() = runBlocking {
+        setup()
+        try {
+            val userId = UUID.randomUUID()
+            val now = System.currentTimeMillis()
+            
+            // Create notes with different content
+            val note1 = Note(
+                id = 0,
+                userId = userId,
+                title = "Note 1",
+                content = "This contains milk and eggs",
+                isPublished = true,
+                createdAt = now,
+                updatedAt = now
+            )
+            val note2 = Note(
+                id = 0,
+                userId = userId,
+                title = "Note 2",
+                content = "This has bread and butter",
+                isPublished = true,
+                createdAt = now + 1,
+                updatedAt = now + 1
+            )
+            noteRepository.create(note1)
+            noteRepository.create(note2)
+
+            // Search for "milk" in content
+            val results = noteRepository.searchByUserId(userId, "milk", limit = 10)
+            assertEquals(1, results.size, "Should find exactly 1 note containing 'milk'")
+            assertTrue(results[0].content.contains("milk"))
+        } finally {
+            teardown()
+        }
+    }
+
+    @Test
+    fun testSearchByUserId_SearchesTags() = runBlocking {
+        setup()
+        try {
+            val userId = UUID.randomUUID()
+            val now = System.currentTimeMillis()
+            
+            // Create notes with tags
+            val note1 = Note(
+                id = 0,
+                userId = userId,
+                title = "Work Note",
+                content = "Work related content",
+                isPublished = true,
+                tags = listOf("work", "important"),
+                createdAt = now,
+                updatedAt = now
+            )
+            val note2 = Note(
+                id = 0,
+                userId = userId,
+                title = "Personal Note",
+                content = "Personal content",
+                isPublished = true,
+                tags = listOf("personal", "hobbies"),
+                createdAt = now + 1,
+                updatedAt = now + 1
+            )
+            noteRepository.create(note1)
+            noteRepository.create(note2)
+
+            // Search for "work" tag
+            val results = noteRepository.searchByUserId(userId, "work", limit = 10)
+            assertEquals(1, results.size, "Should find exactly 1 note with 'work' tag")
+            assertTrue(results[0].tags.contains("work"))
+        } finally {
+            teardown()
+        }
+    }
+
+    @Test
+    fun testSearchByUserId_CaseInsensitive() = runBlocking {
+        setup()
+        try {
+            val userId = UUID.randomUUID()
+            val now = System.currentTimeMillis()
+            
+            // Create note with lowercase content
+            val note = Note(
+                id = 0,
+                userId = userId,
+                title = "Test Title",
+                content = "This has lowercase content",
+                isPublished = true,
+                createdAt = now,
+                updatedAt = now
+            )
+            noteRepository.create(note)
+
+            // Search with uppercase
+            val results = noteRepository.searchByUserId(userId, "LOWERCASE", limit = 10)
+            assertEquals(1, results.size, "Search should be case-insensitive")
+        } finally {
+            teardown()
+        }
+    }
+
+    @Test
+    fun testSearchByUserId_EmptyQueryReturnsAll() = runBlocking {
+        setup()
+        try {
+            val userId = UUID.randomUUID()
+            val now = System.currentTimeMillis()
+            
+            // Create multiple notes
+            repeat(3) { i ->
+                val note = Note(
+                    id = 0,
+                    userId = userId,
+                    title = "Note $i",
+                    content = "Content $i",
+                    isPublished = true,
+                    createdAt = now + i,
+                    updatedAt = now + i
+                )
+                noteRepository.create(note)
+            }
+
+            // Search with empty query
+            val results = noteRepository.searchByUserId(userId, "", limit = 10)
+            assertEquals(3, results.size, "Empty query should return all notes")
+        } finally {
+            teardown()
+        }
+    }
+
+    @Test
+    fun testSearchByUserId_NoResults() = runBlocking {
+        setup()
+        try {
+            val userId = UUID.randomUUID()
+            val now = System.currentTimeMillis()
+            
+            // Create a note
+            val note = Note(
+                id = 0,
+                userId = userId,
+                title = "Unique Title",
+                content = "Unique content here",
+                isPublished = true,
+                createdAt = now,
+                updatedAt = now
+            )
+            noteRepository.create(note)
+
+            // Search for something that doesn't exist
+            val results = noteRepository.searchByUserId(userId, "nonexistentxyz", limit = 10)
+            assertEquals(0, results.size, "Should return no results for non-matching query")
+        } finally {
+            teardown()
+        }
+    }
+
+    @Test
+    fun testSearchByUserId_OtherUserNotesNotIncluded() = runBlocking {
+        setup()
+        try {
+            val userId = UUID.randomUUID()
+            val otherUserId = UUID.randomUUID()
+            val now = System.currentTimeMillis()
+            
+            // Create note for main user
+            val note1 = Note(
+                id = 0,
+                userId = userId,
+                title = "My Note",
+                content = "My content",
+                isPublished = true,
+                createdAt = now,
+                updatedAt = now
+            )
+            // Create note for other user with same content
+            val note2 = Note(
+                id = 0,
+                userId = otherUserId,
+                title = "My Note",
+                content = "My content",
+                isPublished = true,
+                createdAt = now + 1,
+                updatedAt = now + 1
+            )
+            noteRepository.create(note1)
+            noteRepository.create(note2)
+
+            // Search should only return notes for the requesting user
+            val results = noteRepository.searchByUserId(userId, "my", limit = 10)
+            assertEquals(1, results.size, "Should only find 1 note for the requesting user")
+            assertEquals(userId, results[0].userId)
+        } finally {
+            teardown()
+        }
+    }
 }

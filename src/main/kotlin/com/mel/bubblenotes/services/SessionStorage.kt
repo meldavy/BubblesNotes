@@ -8,7 +8,7 @@ import javax.crypto.spec.SecretKeySpec
  * Encrypted session storage for authentication tokens.
  * Uses AES encryption with a centralized key to store and retrieve session data securely.
  */
-class SessionStorage(private val encryptionKey: String = System.getenv("SESSION_ENCRYPTION_KEY") ?: "default-session-key-change-in-production") {
+class SessionStorage(private val encryptionKey: String) {
 
     private val algorithm = "AES"
     private val cipherMode = "AES/ECB/PKCS5Padding"

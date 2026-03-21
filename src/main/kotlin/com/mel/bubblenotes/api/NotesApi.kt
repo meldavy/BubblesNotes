@@ -6,6 +6,7 @@ import com.mel.bubblenotes.getInjector
 import com.mel.bubblenotes.models.Note
 import com.mel.bubblenotes.repositories.NoteRepository
 import com.mel.bubblenotes.repositories.UserRepository
+import com.mel.bubblenotes.services.AIEnhancementService
 import com.mel.bubblenotes.services.URLPreview
 import com.mel.bubblenotes.services.URLPreviewService
 import io.ktor.http.*
@@ -36,6 +37,9 @@ var urlPreviewService: URLPreviewService? = null
 var noteTagRepository: com.mel.bubblenotes.repositories.NoteTagRepository? = null
 var tagRepository: com.mel.bubblenotes.repositories.TagRepository? = null
 var tagService: com.mel.bubblenotes.services.TagService? = null
+
+// AI Enhancement Service instance
+var aiEnhancementService: AIEnhancementService? = null
 
 // JSON serializer for URL preview data
 private val jsonSerializer = Json {
@@ -140,6 +144,20 @@ fun Route.notesApi() {
                         )
                     }"
                 )
+                
+                // Create AI task for enhancement (async processing)
+                val aiService = aiEnhancementService
+                if (aiService != null) {
+                    try {
+                        val taskId = aiService.createAITask(createdId)
+                        call.application.log.info("Created AI task $taskId for new note $createdId")
+                    } catch (e: Exception) {
+                        call.application.log.warn("Failed to create AI task for note $createdId: ${e.message}")
+                    }
+                } else {
+                    call.application.log.debug("AI Enhancement Service not available, skipping AI task creation")
+                }
+                
                 // Return the full note including preview data for immediate UI update
                 val createdNote = note.copy(id = createdId)
                 call.respond(HttpStatusCode.Created, createdNote)
@@ -295,6 +313,17 @@ fun Route.notesApi() {
                 )
 
                 if (repo.update(updatedNote)) {
+                    // Create AI task for enhancement if content changed (async processing)
+                    val aiService = aiEnhancementService
+                    if (aiService != null && noteData.content != null && noteData.content != existingNote.content) {
+                        try {
+                            val taskId = aiService.createAITask(id)
+                            call.application.log.info("Created AI task $taskId for updated note $id")
+                        } catch (e: Exception) {
+                            call.application.log.warn("Failed to create AI task for note $id: ${e.message}")
+                        }
+                    }
+                    
                     call.respond(HttpStatusCode.OK, updatedNote)
                 } else {
                     call.respond(HttpStatusCode.NotFound, mapOf("error" to "Failed to update note"))
@@ -419,6 +448,71 @@ fun Route.notesApi() {
                     // Delete the tag association
                     noteTagRepository?.deleteByNoteIdAndTagId(noteId, tagId)
                     call.respond(HttpStatusCode.NoContent)
+                }
+            }
+        }
+        
+        // AI Enhancement routes
+        route("/api/v1/notes/{id}/ai") {
+            // Get AI task status for a note
+            get("/status") {
+                val noteId = call.parameters["id"]?.toLongOrNull()
+                    ?: return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid note ID"))
+                
+                val aiService = aiEnhancementService ?: return@get call.respond(
+                    HttpStatusCode.ServiceUnavailable,
+                    mapOf("error" to "AI Enhancement Service not available")
+                )
+                
+                // Find the latest AI task for this note
+                val result = aiService.getAITaskResultsForNote(noteId)
+                if (result != null) {
+                    call.respond(HttpStatusCode.OK, mapOf(
+                        "status" to "completed",
+                        "title" to result.aiTitle,
+                        "summary" to result.aiSummary,
+                        "tags" to result.aiTags
+                    ))
+                } else {
+                    call.respond(HttpStatusCode.OK, mapOf(
+                        "status" to "not_found"
+                    ))
+                }
+            }
+            
+            // Trigger immediate AI enhancement (synchronous)
+            post("/enhance") {
+                val noteId = call.parameters["id"]?.toLongOrNull()
+                    ?: return@post call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid note ID"))
+                
+                val aiService = aiEnhancementService ?: return@post call.respond(
+                    HttpStatusCode.ServiceUnavailable,
+                    mapOf("error" to "AI Enhancement Service not available")
+                )
+                
+                val repo = noteRepository ?: return@post call.respond(
+                    HttpStatusCode.ServiceUnavailable,
+                    mapOf("error" to "Database not configured")
+                )
+                
+                val note = repo.findById(noteId) ?: return@post call.respond(
+                    HttpStatusCode.NotFound,
+                    mapOf("error" to "Note not found")
+                )
+                
+                try {
+                    val result = aiService.enhanceNoteImmediately(note)
+                    call.respond(HttpStatusCode.OK, mapOf(
+                        "title" to result.aiTitle,
+                        "summary" to result.aiSummary,
+                        "tags" to result.aiTags
+                    ))
+                } catch (e: Exception) {
+                    call.application.log.error("AI enhancement failed for note $noteId: ${e.message}", e)
+                    call.respond(
+                        HttpStatusCode.InternalServerError,
+                        mapOf("error" to "AI enhancement failed", "message" to e.message)
+                    )
                 }
             }
         }

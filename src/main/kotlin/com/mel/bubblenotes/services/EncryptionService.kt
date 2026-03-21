@@ -7,7 +7,7 @@ import javax.crypto.spec.GCMParameterSpec
 import java.security.SecureRandom
 import java.util.Base64
 
-class EncryptionService(private val encryptionKey: String = System.getenv("ENCRYPTION_KEY") ?: "default-key-change-in-production") {
+class EncryptionService(private val encryptionKey: String) {
     
     fun encrypt(data: ByteArray): ByteArray {
         val secretKey = generateSecretKey()

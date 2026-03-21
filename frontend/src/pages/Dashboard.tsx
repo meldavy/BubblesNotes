@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Menu, Transition } from '@headlessui/react';
+import { ChevronDownIcon } from '@heroicons/react/24/solid';
 import { NoteEditor } from '../components/NoteEditor';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Header } from '../components/Header';
 import { UserProfile } from '../components/UserProfile';
 import { InfiniteScroll } from '../components/InfiniteScroll';
+import { SearchBar } from '../components/ui/SearchBar';
 import { useAuth } from '../contexts/AuthContext';
 import { NoteCard, Note } from '../components/NoteCard';
 
@@ -24,9 +27,18 @@ export const Dashboard: React.FC = () => {
     const touchStartY = React.useRef<number | null>(null);
     const hasInitialLoaded = useRef(false);
     const [noteTags, setNoteTags] = useState<string[]>([]);
+    
+    // Search state
+    const [searchQuery, setSearchQuery] = useState('');
+    const [isSearching, setIsSearching] = useState(false);
+    const [allTags, setAllTags] = useState<string[]>([]);
+    const [selectedTag, setSelectedTag] = useState<string | null>(null);
+    const [showLoading, setShowLoading] = useState(false);
+    const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    
 
     const fetchNotes = useCallback(async (isInitialLoad: boolean = false, append: boolean = false) => {
-        // Prevent duplicate initial loads
+        // Prevent duplicate initial loads only on first render
         if (isInitialLoad && hasInitialLoaded.current) {
             return;
         }
@@ -35,69 +47,301 @@ export const Dashboard: React.FC = () => {
         }
 
         try {
-            if (isInitialLoad) {
+            // Set loading state for initial load or refresh (not append)
+            if (isInitialLoad || (!append && (searchQuery.trim() || selectedTag))) {
                 setIsLoading(true);
+                // Show loading skeleton only after a short delay to prevent flicker
+                loadingTimeoutRef.current = setTimeout(() => {
+                    setShowLoading(true);
+                }, 200);
             } else if (!append) {
                 setIsLoadingMore(true);
             }
             setError(null);
 
-            const url = new URL('/api/v1/notes', window.location.origin);
-            const limit = 20; // Use smaller limit for pagination
-            url.searchParams.set('limit', limit.toString());
-            
-            // Add cursor if we have one (for pagination)
-            if (nextCursor !== null && !isInitialLoad) {
-                url.searchParams.set('cursor', nextCursor.toString());
-            }
+            // Determine which API to call based on search state
+            if (searchQuery.trim()) {
+                // Use search API
+                const response = await fetch('/api/v1/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        query: searchQuery.trim(),
+                        limit: 20,
+                        cursor: nextCursor !== null ? nextCursor : undefined
+                    })
+                });
 
-            const response = await fetch(url.toString(), {
-                credentials: 'include'
-            });
+                if (!response.ok) {
+                    throw new Error('Failed to search notes');
+                }
 
-            if (!response.ok) {
-                throw new Error('Failed to fetch notes');
-            }
+                const data = await response.json();
+                const searchResults = data.results || [];
 
-            const data = await response.json();
-            
-            if (append) {
-                // Append new notes to existing list
-                setNotes(prev => [...prev, ...data]);
-            } else if (isInitialLoad) {
-                // Replace all notes on initial load
-                setNotes(data);
-            }
-            
-            // Update cursor for next page
-            // If we got fewer notes than the limit, we've reached the end
-            if (data.length < limit) {
-                setNextCursor(null); // No more pages
-            } else if (data.length > 0) {
-                // Use the smallest ID from this batch as the cursor for next page
-                const minId = Math.min(...data.map((n: Note) => n.id));
-                setNextCursor(minId);
+                if (append) {
+                    setNotes(prev => [...prev, ...searchResults]);
+                } else {
+                    // Replace notes for search or initial load
+                    setNotes(searchResults);
+                }
+
+                // Update cursor for search results
+                if (searchResults.length < 20) {
+                    setNextCursor(null);
+                } else if (searchResults.length > 0) {
+                    const minId = Math.min(...searchResults.map((n: Note) => n.id));
+                    setNextCursor(minId);
+                }
+            } else if (selectedTag) {
+                // Use tag filter API
+                const url = new URL('/api/v1/notes', window.location.origin);
+                url.searchParams.set('limit', '20');
+                url.searchParams.set('tag', selectedTag);
+                
+                if (nextCursor !== null && !isInitialLoad) {
+                    url.searchParams.set('cursor', nextCursor.toString());
+                }
+
+                const response = await fetch(url.toString(), {
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to fetch notes by tag');
+                }
+
+                const data = await response.json();
+
+                if (append) {
+                    setNotes(prev => [...prev, ...data]);
+                } else {
+                    // Replace notes for tag filter or initial load
+                    setNotes(data);
+                }
+
+                if (data.length < 20) {
+                    setNextCursor(null);
+                } else if (data.length > 0) {
+                    const minId = Math.min(...data.map((n: Note) => n.id));
+                    setNextCursor(minId);
+                }
+            } else {
+                // Use regular notes API
+                const url = new URL('/api/v1/notes', window.location.origin);
+                const limit = 20;
+                url.searchParams.set('limit', limit.toString());
+                
+                if (nextCursor !== null && !isInitialLoad) {
+                    url.searchParams.set('cursor', nextCursor.toString());
+                }
+
+                const response = await fetch(url.toString(), {
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to fetch notes');
+                }
+
+                const data = await response.json();
+                
+                if (append) {
+                    setNotes(prev => [...prev, ...data]);
+                } else {
+                    // Replace notes for initial load
+                    setNotes(data);
+                }
+                
+                if (data.length < limit) {
+                    setNextCursor(null);
+                } else if (data.length > 0) {
+                    const minId = Math.min(...data.map((n: Note) => n.id));
+                    setNextCursor(minId);
+                }
             }
         } catch (err) {
-            if (isInitialLoad) {
-                setError(err instanceof Error ? err.message : 'An error occurred');
-            } else {
-                setError(err instanceof Error ? err.message : 'An error occurred');
-            }
+            setError(err instanceof Error ? err.message : 'An error occurred');
         } finally {
-            if (isInitialLoad) {
+            // Clear any pending timeout
+            if (loadingTimeoutRef.current) {
+                clearTimeout(loadingTimeoutRef.current);
+                loadingTimeoutRef.current = null;
+            }
+            // Set loading false for initial load or refresh (not append)
+            if (isInitialLoad || (!append && (searchQuery.trim() || selectedTag))) {
                 setIsLoading(false);
-            } else {
+                setShowLoading(false);
+            } else if (!append) {
                 setIsLoadingMore(false);
             }
         }
-    }, [nextCursor]);
+    }, [nextCursor, searchQuery, selectedTag]);
+
+    // Fetch tags for the tag filter dropdown
+    const fetchTags = useCallback(async () => {
+        try {
+            const response = await fetch('/api/v1/tags', {
+                credentials: 'include'
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setAllTags(data);
+            }
+        } catch (err) {
+            console.error('Failed to fetch tags:', err);
+        }
+    }, []);
+
+    // Trigger search when searchQuery changes (debounced)
+    useEffect(() => {
+        if (!isAuthenticated) {
+            return;
+        }
+        
+        const debounceTimer = setTimeout(() => {
+            // Use false for isInitialLoad since search is a refresh, not initial load
+            fetchNotes(false);
+        }, 300); // 300ms debounce to avoid excessive API calls
+        
+        return () => {
+            clearTimeout(debounceTimer);
+        };
+    }, [searchQuery, selectedTag, isAuthenticated, fetchNotes]);
 
     useEffect(() => {
         if (isAuthenticated && !hasInitialLoaded.current) {
             fetchNotes(true);
+            fetchTags();
         }
-    }, [isAuthenticated, fetchNotes]);
+    }, [isAuthenticated, fetchNotes, fetchTags]);
+
+    // Reset search when authentication changes
+    useEffect(() => {
+        if (!isAuthenticated) {
+            setSearchQuery('');
+            setSelectedTag(null);
+            setNotes([]);
+            setNextCursor(null);
+        }
+    }, [isAuthenticated]);
+
+    // Cleanup loading timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (loadingTimeoutRef.current) {
+                clearTimeout(loadingTimeoutRef.current);
+            }
+        };
+    }, []);
+
+    // Handle search submission
+    const handleSearch = async (query: string) => {
+        setSearchQuery(query);
+        setSelectedTag(null); // Clear tag filter when searching
+        setNextCursor(null); // Reset pagination
+        
+        // Directly fetch search results
+        setIsLoading(true);
+        setShowLoading(true);
+        setError(null);
+        try {
+            const response = await fetch('/api/v1/search', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                    query: query.trim(),
+                    limit: 20,
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to search notes');
+            }
+            
+            const data = await response.json();
+            const searchResults = data.results || [];
+            setNotes(searchResults);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'An error occurred');
+        } finally {
+            setIsLoading(false);
+            setShowLoading(false);
+        }
+    };
+
+    // Handle tag selection
+    const handleTagSelect = async (tag: string | null) => {
+        setSelectedTag(tag);
+        setSearchQuery(''); // Clear search when selecting tag
+        setNextCursor(null); // Reset pagination
+        
+        // Directly fetch notes by tag
+        setIsLoading(true);
+        setShowLoading(true);
+        setError(null);
+        try {
+            const url = new URL('/api/v1/notes', window.location.origin);
+            url.searchParams.set('limit', '20');
+            if (tag) {
+                url.searchParams.set('tag', tag);
+            }
+            
+            const response = await fetch(url.toString(), {
+                credentials: 'include'
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to fetch notes');
+            }
+            
+            const data = await response.json();
+            setNotes(data);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'An error occurred');
+        } finally {
+            setIsLoading(false);
+            setShowLoading(false);
+        }
+    };
+
+    // Clear search and filter
+    const handleClearSearch = async () => {
+        setSearchQuery('');
+        setSelectedTag(null);
+        setNextCursor(null);
+        
+        // Directly fetch all notes
+        setIsLoading(true);
+        setShowLoading(true);
+        setError(null);
+        try {
+            const url = new URL('/api/v1/notes', window.location.origin);
+            url.searchParams.set('limit', '20');
+            
+            const response = await fetch(url.toString(), {
+                credentials: 'include'
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to fetch notes');
+            }
+            
+            const data = await response.json();
+            setNotes(data);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'An error occurred');
+        } finally {
+            setIsLoading(false);
+            setShowLoading(false);
+        }
+    };
 
     const handleSaveNote = async () => {
         if (!noteContent.trim()) return;
@@ -316,15 +560,149 @@ export const Dashboard: React.FC = () => {
 
                 {/* Notes Grid */}
                 <section>
-                    <div className="flex items-center justify-between mb-6">
-                        <h2 className="text-xl font-semibold text-neutral-800">Your Notes</h2>
+                    {/* Search and Filter Bar */}
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
+                        <h2 className="text-xl font-semibold text-neutral-800">
+                            {searchQuery ? `Search Results for "${searchQuery}"` : selectedTag ? `Notes tagged "${selectedTag}"` : 'Your Notes'}
+                        </h2>
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                            {/* Search Bar */}
+                            <div className="w-full sm:w-72">
+                                <SearchBar
+                                    placeholder="Search notes..."
+                                    value={searchQuery}
+                                    onChange={setSearchQuery}
+                                    onSearch={handleSearch}
+                                    suggestions={allTags.filter(tag => tag.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 5)}
+                                    showClear={true}
+                                />
+                            </div>
+                            {/* Tag Filter Dropdown */}
+                            <Menu as="div" className="relative">
+                                <Menu.Button className="
+                                    flex items-center justify-between
+                                    h-10 px-4 py-0 leading-none
+                                    rounded-lg
+                                    border border-neutral-300
+                                    bg-white
+                                    text-sm text-neutral-700
+                                    focus:outline-none
+                                    focus:ring-2
+                                    focus:ring-primary-500
+                                    focus:border-primary-500
+                                    transition-all
+                                    duration-[150ms]
+                                    ease-out
+                                    cursor-pointer
+                                    hover:border-neutral-400
+                                ">
+                                    <span className="truncate">
+                                        {selectedTag || 'All Tags'}
+                                    </span>
+                                    <ChevronDownIcon className="w-4 h-4 text-neutral-500 ml-2 flex-shrink-0" />
+                                </Menu.Button>
+                                <Transition
+                                    enter="transition ease-out duration-100"
+                                    enterFrom="transform opacity-0 scale-95"
+                                    enterTo="transform opacity-100 scale-100"
+                                    leave="transition ease-in duration-75"
+                                    leaveFrom="transform opacity-100 scale-100"
+                                    leaveTo="transform opacity-0 scale-0"
+                                >
+                                    <Menu.Items className="
+                                        absolute right-0 mt-2
+                                        w-48 origin-top-right
+                                        bg-white rounded-lg
+                                        shadow-lg ring-1 ring-black ring-opacity-5
+                                        focus:outline-none z-50
+                                    ">
+                                        <div className="py-1">
+                                            <Menu.Item>
+                                                {() => (
+                                                    <button
+                                                        onClick={() => handleTagSelect(null)}
+                                                        className="
+                                                            w-full text-left
+                                                            px-4 py-2
+                                                            text-sm
+                                                            text-neutral-700
+                                                            hover:bg-neutral-100
+                                                            focus:bg-neutral-100
+                                                            focus:outline-none
+                                                        "
+                                                    >
+                                                        All Tags
+                                                    </button>
+                                                )}
+                                            </Menu.Item>
+                                            {allTags.map(tag => (
+                                                <Menu.Item key={tag}>
+                                                    {() => (
+                                                        <button
+                                                            onClick={() => handleTagSelect(tag)}
+                                                            className={`
+                                                                w-full text-left
+                                                                px-4 py-2
+                                                                text-sm
+                                                                focus:outline-none
+                                                                ${selectedTag === tag
+                                                                    ? 'bg-primary-50 text-primary-700'
+                                                                    : 'text-neutral-700 hover:bg-neutral-100 focus:bg-neutral-100'
+                                                                }
+                                                            `}
+                                                        >
+                                                            {tag}
+                                                        </button>
+                                                    )}
+                                                </Menu.Item>
+                                            ))}
+                                        </div>
+                                    </Menu.Items>
+                                </Transition>
+                            </Menu>
+                            {/* Clear Filter Button */}
+                            {(searchQuery || selectedTag) && (
+                                <Button variant="ghost" size="sm" onClick={handleClearSearch}>
+                                    <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                    Clear
+                                </Button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Active Filter Display */}
+                    {(searchQuery || selectedTag) && (
+                        <div className="flex items-center flex-wrap gap-2 mb-4">
+                            <span className="text-sm text-neutral-500">Active filter:</span>
+                            {searchQuery && (
+                                <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium bg-primary-50 text-primary-700 border border-primary-200">
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                    </svg>
+                                    {searchQuery}
+                                </span>
+                            )}
+                            {selectedTag && (
+                                <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium bg-accent-purple-50 text-accent-purple-700 border border-accent-purple-200">
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                                    </svg>
+                                    {selectedTag}
+                                </span>
+                            )}
+                        </div>
+                    )}
+
+                    <div className="flex items-center justify-between mb-4">
                         <span className="text-sm font-medium text-neutral-500 bg-neutral-100 px-3 py-1 rounded-full">
-                            {notes.length} notes
+                            {notes.length} {notes.length === 1 ? 'note' : 'notes'}
                         </span>
                     </div>
 
-                    {/* Loading State */}
-                    {isLoading && (
+                    {/* Loading State - only show skeleton after 200ms to prevent flicker */}
+                    {isLoading && showLoading && (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {[...Array(6)].map((_, i) => (
                                 <Card key={i} className="animate-pulse">

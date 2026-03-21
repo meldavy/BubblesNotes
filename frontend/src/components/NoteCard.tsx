@@ -21,6 +21,9 @@ export interface Note {
   isPublished: boolean;
   previewData?: string; // JSON string of URL previews
   tags?: string[];
+  aiTags?: string[]; // AI-generated tags
+  aiTitle?: string; // AI-generated title
+  aiSummary?: string; // AI-generated summary
   createdAt: number;
   updatedAt: number;
 }
@@ -72,8 +75,8 @@ export const NoteCard: React.FC<NoteCardProps> = ({
       <article className="flex flex-col h-full">
         {/* Header with title and editing badge */}
         <div className="flex items-start justify-between mb-2">
-          <h3 className="font-semibold text-neutral-800 line-clamp-1">
-            {note.title || 'Untitled'}
+          <h3 className="font-semibold text-neutral-800 line-clamp-3">
+            {note.aiTitle || note.title || 'Untitled'}
           </h3>
           {isEditing && (
             <span className="text-xs bg-primary-100 text-primary-700 px-2 py-0.5 rounded-full">
@@ -82,21 +85,43 @@ export const NoteCard: React.FC<NoteCardProps> = ({
           )}
         </div>
 
+        {/* AI Summary (if available) */}
+        {note.aiSummary && (
+          <div className="mb-2 p-2 bg-accent-purple-50 rounded-md border border-accent-purple-100">
+            <p className="text-xs text-accent-purple-700 leading-relaxed">
+              {note.aiSummary}
+            </p>
+          </div>
+        )}
+
         {/* Content preview */}
         <MarkdownPreview
           content={note.content}
-          maxLines={3}
           className="text-sm"
         />
 
-        {/* Tags */}
+        {/* Tags (user-created) */}
         {note.tags && note.tags.length > 0 && (
           <div className="mt-2 mb-2 flex flex-wrap gap-1.5">
             {note.tags.map(tag => (
               <TagChip
-                key={tag}
+                key={`user-${tag}`}
                 label={tag}
                 removable={false}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* AI-generated tags */}
+        {note.aiTags && note.aiTags.length > 0 && (
+          <div className="mt-1 mb-2 flex flex-wrap gap-1.5">
+            {note.aiTags.map(tag => (
+              <TagChip
+                key={`ai-${tag}`}
+                label={tag}
+                removable={false}
+                isAiGenerated={true}
               />
             ))}
           </div>

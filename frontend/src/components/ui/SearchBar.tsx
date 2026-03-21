@@ -19,8 +19,11 @@ export interface SearchBarProps {
   /** Whether to show clear button */
   showClear?: boolean;
   
-  /** Additional CSS classes */
+  /** Additional CSS classes for the container */
   className?: string;
+  
+  /** Additional CSS classes for the input element */
+  inputClassName?: string;
 }
 
 /**
@@ -35,6 +38,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   suggestions = [],
   showClear = true,
   className = '',
+  inputClassName = '',
 }) => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
@@ -67,11 +71,12 @@ export const SearchBar: React.FC<SearchBarProps> = ({
     setSelectedIndex(-1);
   };
 
-  const handleSubmit = (e?: React.FormEvent) => {
+  const handleSubmit = (e?: React.FormEvent, submitValue?: string) => {
     e?.preventDefault();
     setShowSuggestions(false);
-    if (value.trim() && onSearch) {
-      onSearch(value.trim());
+    const searchValue = (submitValue ?? value).trim();
+    if (searchValue && onSearch) {
+      onSearch(searchValue);
     }
   };
 
@@ -109,7 +114,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   const handleSuggestionClick = (suggestion: string) => {
     onChange(suggestion);
     setShowSuggestions(false);
-    handleSubmit();
+    handleSubmit(undefined, suggestion);
   };
 
   return (
@@ -151,11 +156,13 @@ export const SearchBar: React.FC<SearchBarProps> = ({
             aria-expanded={showSuggestions}
             role="combobox"
             className={`
-              w-full pl-10 pr-${showClear && value ? '8' : '4'} py-2.5
+              w-full pl-10 pr-10
               rounded-lg border border-neutral-300 bg-white
-              text-sm text-neutral-900 placeholder-neutral-400
-              focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
-              transition-all duration-fast
+              text-sm text-neutral-700 placeholder-neutral-400
+              focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500
+              transition-all duration-[150ms] ease-out
+              h-10 leading-none
+              ${inputClassName}
             `}
           />
 
@@ -167,12 +174,13 @@ export const SearchBar: React.FC<SearchBarProps> = ({
               aria-label="Clear search"
               className={`
                 absolute right-2 top-1/2 -translate-y-1/2
-                p-1 rounded-full text-neutral-400 hover:text-neutral-600
-                hover:bg-neutral-100 transition-all duration-fast
-                focus:outline-none focus:ring-2 focus:ring-primary-500
+                flex items-center justify-center
+                text-neutral-400 hover:text-neutral-600
+                transition-all duration-[150ms] ease-out
+                focus:outline-none
               `}
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -189,8 +197,9 @@ export const SearchBar: React.FC<SearchBarProps> = ({
             aria-label="Submit search"
             className={`
               absolute right-2 top-1/2 -translate-y-1/2
-              md:hidden p-1 rounded-full text-primary-600 hover:bg-primary-50
-              transition-all duration-fast focus:outline-none focus:ring-2 focus:ring-primary-500
+              md:hidden p-1 rounded-md text-primary-600 hover:bg-primary-50
+              transition-all duration-[150ms] ease-out
+              focus:outline-none focus:ring-2 focus:ring-primary-500
             `}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -218,8 +227,8 @@ export const SearchBar: React.FC<SearchBarProps> = ({
               onClick={() => handleSuggestionClick(suggestion)}
               onMouseEnter={() => setSelectedIndex(index)}
               className={`
-                w-full px-4 py-2.5 text-left text-sm
-                transition-all duration-fast
+                w-full px-4 py-2 text-left text-sm
+                transition-all duration-[150ms] ease-out
                 focus:outline-none focus:bg-neutral-100
                 ${selectedIndex === index ? 'bg-neutral-100' : 'bg-white'}
                 ${index === suggestions.length - 1 ? 'rounded-b-lg' : ''}
