@@ -1,13 +1,21 @@
 package com.mel.bubblenotes.repositories
 
 import com.mel.bubblenotes.models.Note
+import com.zaxxer.hikari.HikariDataSource
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.sql.Connection
 import java.util.UUID
 
-open class NoteRepository(private val connection: Connection) {
+open class NoteRepository(private val dataSource: HikariDataSource) {
     private val json = Json { ignoreUnknownKeys = true }
+
+    /**
+     * Get a fresh connection from the pool for each database operation.
+     * This prevents "Connection is closed" errors that occur when storing
+     * a single connection across multiple requests.
+     */
+    private fun getConnection(): Connection = dataSource.connection
 
     fun create(note: Note): Long {
         val sql =
@@ -16,22 +24,25 @@ open class NoteRepository(private val connection: Connection) {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """.trimIndent()
 
-        connection.prepareStatement(sql, java.sql.Statement.RETURN_GENERATED_KEYS).use { stmt ->
-            stmt.setObject(1, note.userId)
-            stmt.setString(2, note.title)
-            stmt.setString(3, note.content)
-            stmt.setBoolean(4, note.isPublished)
-            stmt.setString(5, json.encodeToString(note.tags))
-            stmt.setString(6, note.previewData)
-            stmt.setLong(7, note.createdAt)
-            stmt.setLong(8, note.updatedAt)
+        getConnection().use { conn ->
+            conn.prepareStatement(sql, java.sql.Statement.RETURN_GENERATED_KEYS).use { stmt ->
+                stmt.setObject(1, note.userId)
+                stmt.setString(2, note.title)
+                stmt.setString(3, note.content)
+                stmt.setBoolean(4, note.isPublished)
+                stmt.setString(5, json.encodeToString(note.tags))
+                stmt.setString(6, note.previewData)
+                stmt.setLong(7, note.createdAt)
+                stmt.setLong(8, note.updatedAt)
 
-            stmt.executeUpdate()
-            val rs = stmt.generatedKeys
-            if (rs.next()) {
-                return rs.getLong(1)
+                stmt.executeUpdate()
+                stmt.generatedKeys.use { rs ->
+                    if (rs.next()) {
+                        return rs.getLong(1)
+                    }
+                }
+                throw Exception("Failed to create note")
             }
-            throw Exception("Failed to create note")
         }
     }
 
@@ -42,28 +53,30 @@ open class NoteRepository(private val connection: Connection) {
             FROM notes WHERE id = ?
             """.trimIndent()
 
-        connection.prepareStatement(sql).use { stmt ->
-            stmt.setLong(1, id)
-            val rs = stmt.executeQuery()
-
-            if (rs.next()) {
-                return Note(
-                    id = rs.getLong("id"),
-                    userId = rs.getObject("user_id", UUID::class.java),
-                    title = rs.getString("title"),
-                    content = rs.getString("content"),
-                    isPublished = rs.getBoolean("is_published"),
-                    tags = rs.getString("tags")?.let { runCatching { json.decodeFromString<List<String>>(it) }.getOrDefault(emptyList()) } ?: emptyList(),
-                    aiTitle = rs.getString("ai_title"),
-                    aiSummary = rs.getString("ai_summary"),
-                    aiTags = rs.getString("ai_tags")?.let { runCatching { json.decodeFromString<List<String>>(it) }.getOrDefault(emptyList()) } ?: emptyList(),
-                    lastVersionId = rs.getLongOrNull("last_version_id"),
-                    previewData = rs.getString("preview_data"),
-                    createdAt = rs.getLong("created_at"),
-                    updatedAt = rs.getLong("updated_at"),
-                )
+        getConnection().use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.setLong(1, id)
+                stmt.executeQuery().use { rs ->
+                    if (rs.next()) {
+                        return Note(
+                            id = rs.getLong("id"),
+                            userId = rs.getObject("user_id", UUID::class.java),
+                            title = rs.getString("title"),
+                            content = rs.getString("content"),
+                            isPublished = rs.getBoolean("is_published"),
+                            tags = rs.getString("tags")?.let { runCatching { json.decodeFromString<List<String>>(it) }.getOrDefault(emptyList()) } ?: emptyList(),
+                            aiTitle = rs.getString("ai_title"),
+                            aiSummary = rs.getString("ai_summary"),
+                            aiTags = rs.getString("ai_tags")?.let { runCatching { json.decodeFromString<List<String>>(it) }.getOrDefault(emptyList()) } ?: emptyList(),
+                            lastVersionId = rs.getLongOrNull("last_version_id"),
+                            previewData = rs.getString("preview_data"),
+                            createdAt = rs.getLong("created_at"),
+                            updatedAt = rs.getLong("updated_at"),
+                        )
+                    }
+                    return null
+                }
             }
-            return null
         }
     }
 
@@ -90,33 +103,36 @@ open class NoteRepository(private val connection: Connection) {
                 LIMIT ?
                 """.trimIndent()
             }
-        connection.prepareStatement(sql).use { stmt ->
-            var idx = 1
-            stmt.setObject(idx++, userId)
-            if (cursor != null) {
-                stmt.setLong(idx++, cursor)
-            }
-            stmt.setInt(idx, limit)
-            val rs = stmt.executeQuery()
-            return buildList {
-                while (rs.next()) {
-                    add(
-                        Note(
-                            id = rs.getLong("id"),
-                            userId = rs.getObject("user_id", UUID::class.java),
-                            title = rs.getString("title"),
-                            content = rs.getString("content"),
-                            isPublished = rs.getBoolean("is_published"),
-                            tags = rs.getString("tags")?.let { runCatching { json.decodeFromString<List<String>>(it) }.getOrDefault(emptyList()) } ?: emptyList(),
-                            aiTitle = rs.getString("ai_title"),
-                            aiSummary = rs.getString("ai_summary"),
-                            aiTags = rs.getString("ai_tags")?.let { runCatching { json.decodeFromString<List<String>>(it) }.getOrDefault(emptyList()) } ?: emptyList(),
-                            lastVersionId = rs.getLongOrNull("last_version_id"),
-                            previewData = rs.getString("preview_data"),
-                            createdAt = rs.getLong("created_at"),
-                            updatedAt = rs.getLong("updated_at"),
-                        ),
-                    )
+        getConnection().use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                var idx = 1
+                stmt.setObject(idx++, userId)
+                if (cursor != null) {
+                    stmt.setLong(idx++, cursor)
+                }
+                stmt.setInt(idx, limit)
+                stmt.executeQuery().use { rs ->
+                    return buildList {
+                        while (rs.next()) {
+                            add(
+                                Note(
+                                    id = rs.getLong("id"),
+                                    userId = rs.getObject("user_id", UUID::class.java),
+                                    title = rs.getString("title"),
+                                    content = rs.getString("content"),
+                                    isPublished = rs.getBoolean("is_published"),
+                                    tags = rs.getString("tags")?.let { runCatching { json.decodeFromString<List<String>>(it) }.getOrDefault(emptyList()) } ?: emptyList(),
+                                    aiTitle = rs.getString("ai_title"),
+                                    aiSummary = rs.getString("ai_summary"),
+                                    aiTags = rs.getString("ai_tags")?.let { runCatching { json.decodeFromString<List<String>>(it) }.getOrDefault(emptyList()) } ?: emptyList(),
+                                    lastVersionId = rs.getLongOrNull("last_version_id"),
+                                    previewData = rs.getString("preview_data"),
+                                    createdAt = rs.getLong("created_at"),
+                                    updatedAt = rs.getLong("updated_at"),
+                                ),
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -152,7 +168,7 @@ open class NoteRepository(private val connection: Connection) {
                 LIMIT ?
                 """.trimIndent()
             }
-        connection.prepareStatement(sql).use { stmt ->
+        getConnection().prepareStatement(sql).use { stmt ->
             var idx = 1
             stmt.setObject(idx++, userId)
             if (cursor != null) {
@@ -196,7 +212,7 @@ open class NoteRepository(private val connection: Connection) {
             WHERE id = ? AND user_id = ?
             """.trimIndent()
 
-        connection.prepareStatement(sql).use { stmt ->
+        getConnection().prepareStatement(sql).use { stmt ->
             stmt.setString(1, note.title)
             stmt.setString(2, note.content)
             stmt.setBoolean(3, note.isPublished)
@@ -234,7 +250,7 @@ open class NoteRepository(private val connection: Connection) {
             WHERE id = ?
             """.trimIndent()
 
-        connection.prepareStatement(sql).use { stmt ->
+        getConnection().prepareStatement(sql).use { stmt ->
             stmt.setString(1, aiTitle)
             stmt.setString(2, aiSummary)
             stmt.setString(3, aiTags?.let { json.encodeToString(it) })
@@ -243,6 +259,17 @@ open class NoteRepository(private val connection: Connection) {
 
             return stmt.executeUpdate() > 0
         }
+    }
+
+    /**
+     * Escapes special LIKE pattern characters to prevent SQL injection.
+     * Special characters (% _ \) are escaped with backslash so they are treated as literals.
+     */
+    private fun escapeLikePattern(input: String): String {
+        return input
+            .replace("\\", "\\\\") // Escape backslash first
+            .replace("%", "\\%") // Escape percent sign
+            .replace("_", "\\_") // Escape underscore
     }
 
     /**
@@ -255,7 +282,8 @@ open class NoteRepository(private val connection: Connection) {
         limit: Int = 20,
         cursor: Long? = null,
     ): List<Note> {
-        val pattern = "%\"${tagName.trim()}\"%" // matches exact JSON string element
+        val escapedTagName = escapeLikePattern(tagName.trim())
+        val pattern = "%\"${escapedTagName}\"%" // matches exact JSON string element
         val sql =
             if (cursor != null) {
                 """
@@ -275,7 +303,7 @@ open class NoteRepository(private val connection: Connection) {
                 """.trimIndent()
             }
 
-        connection.prepareStatement(sql).use { stmt ->
+        getConnection().prepareStatement(sql).use { stmt ->
             var idx = 1
             stmt.setObject(idx++, userId)
             if (cursor != null) {
@@ -329,11 +357,14 @@ open class NoteRepository(private val connection: Connection) {
         // Normalize query for search (trim and lowercase for case-insensitive match)
         val searchQuery = query.trim().lowercase()
 
+        // Escape LIKE pattern special characters to prevent SQL injection
+        val escapedQuery = escapeLikePattern(searchQuery)
+
         // Build search patterns for title, content, and tags
         // Using OR to match any of the fields
-        val titlePattern = "%$searchQuery%"
-        val contentPattern = "%$searchQuery%"
-        val tagsPattern = "%\"${searchQuery}\"%"
+        val titlePattern = "%$escapedQuery%"
+        val contentPattern = "%$escapedQuery%"
+        val tagsPattern = "%\"${escapedQuery}\"%"
 
         val sql =
             if (cursor != null) {
@@ -365,7 +396,7 @@ open class NoteRepository(private val connection: Connection) {
                 """.trimIndent()
             }
 
-        connection.prepareStatement(sql).use { stmt ->
+        getConnection().prepareStatement(sql).use { stmt ->
             var idx = 1
             stmt.setObject(idx++, userId)
             if (cursor != null) {
@@ -407,7 +438,7 @@ open class NoteRepository(private val connection: Connection) {
     ): Boolean {
         val sql = "DELETE FROM notes WHERE id = ? AND user_id = ?"
 
-        connection.prepareStatement(sql).use { stmt ->
+        getConnection().prepareStatement(sql).use { stmt ->
             stmt.setLong(1, id)
             stmt.setObject(2, userId)
             return stmt.executeUpdate() > 0
@@ -417,7 +448,7 @@ open class NoteRepository(private val connection: Connection) {
     fun countByUserId(userId: UUID): Int {
         val sql = "SELECT COUNT(*) FROM notes WHERE user_id = ?"
 
-        connection.prepareStatement(sql).use { stmt ->
+        getConnection().prepareStatement(sql).use { stmt ->
             stmt.setObject(1, userId)
             val rs = stmt.executeQuery()
             if (rs.next()) {
@@ -456,7 +487,7 @@ open class NoteRepository(private val connection: Connection) {
                 ORDER BY tag_name
                 """.trimIndent()
 
-            connection.prepareStatement(sql).use { stmt ->
+            getConnection().prepareStatement(sql).use { stmt ->
                 stmt.setObject(1, userId)
                 stmt.setObject(2, userId)
                 val rs = stmt.executeQuery()
@@ -493,7 +524,7 @@ open class NoteRepository(private val connection: Connection) {
                 LIMIT ?
                 """.trimIndent()
 
-            connection.prepareStatement(sql).use { stmt ->
+            getConnection().prepareStatement(sql).use { stmt ->
                 stmt.setObject(1, userId)
                 stmt.setObject(2, lastId)
                 stmt.setInt(3, batchSize)

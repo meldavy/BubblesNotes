@@ -25,6 +25,9 @@ class AITaskRepositoryTest {
                 jdbcUrl = "jdbc:h2:mem:$uniqueDbName;DB_CLOSE_DELAY=-1;MODE=PostgreSQL"
                 username = "sa"
                 password = ""
+                // Increase pool size to handle concurrent test operations
+                maximumPoolSize = 10
+                minimumIdle = 2
             }
         dataSource = HikariDataSource(hikariConfig)
 
@@ -46,9 +49,8 @@ class AITaskRepositoryTest {
             throw e
         }
 
-        val connection = dataSource.connection
-        repository = AITaskRepository(connection)
-        noteRepository = NoteRepository(connection)
+        repository = AITaskRepository(dataSource)
+        noteRepository = NoteRepository(dataSource)
     }
 
     fun teardown() {

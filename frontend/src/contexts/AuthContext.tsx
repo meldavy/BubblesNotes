@@ -14,9 +14,13 @@ interface AuthContextType {
   login: () => void;
   logout: () => void;
   error: string | null;
+  getAccessToken: () => string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// Store access token in memory (not in localStorage/sessionStorage for better security)
+let accessToken: string | null = null;
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
@@ -26,14 +30,45 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Check authentication status on mount
   useEffect(() => {
+    // Check if we already have a stored access token
+    const storedToken = sessionStorage.getItem('access_token');
+    if (storedToken) {
+      accessToken = storedToken;
+      console.log('Access token loaded from sessionStorage');
+    }
+    
+    // Extract access token from URL fragment after OAuth callback
+    const hash = window.location.hash;
+    if (hash && hash.includes('accessToken=')) {
+      const match = hash.match(/accessToken=([^&]+)/);
+      if (match && match[1]) {
+        accessToken = match[1];
+        // Store in sessionStorage for persistence across page reloads
+        sessionStorage.setItem('access_token', accessToken);
+        console.log('Access token extracted from URL fragment and stored');
+        // Clear the hash from the URL without reloading
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+    
     checkAuthStatus();
   }, []);
 
   const checkAuthStatus = async () => {
     try {
       setIsLoading(true);
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      
+      // Include access token in Authorization header if available
+      if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`;
+      }
+      
       const response = await fetch('/api/v1/auth/me', {
-        credentials: 'include' // Include session cookie for authentication
+        headers,
+        credentials: 'include' // Include refresh token cookie
       });
       
       if (response.ok) {
@@ -52,6 +87,53 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setUser(null);
         }
       } else if (response.status === 401) {
+        // Token expired - try to refresh using the refresh token cookie
+        if (accessToken) {
+          // Access token expired, try to get a new one
+          try {
+            const refreshResponse = await fetch('/auth/refresh', {
+              method: 'POST',
+              credentials: 'include'
+            });
+            
+            if (refreshResponse.ok) {
+              const refreshData = await refreshResponse.json();
+              if (refreshData.accessToken) {
+                accessToken = refreshData.accessToken;
+                // Store new access token in sessionStorage
+                if (accessToken) {
+                  sessionStorage.setItem('access_token', accessToken);
+                }
+                // Retry the auth check with new token
+                const retryHeaders: Record<string, string> = {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${accessToken}`
+                };
+                const retryResponse = await fetch('/api/v1/auth/me', {
+                  headers: retryHeaders,
+                  credentials: 'include'
+                });
+                
+                if (retryResponse.ok) {
+                  const data = await retryResponse.json();
+                  if (data.authenticated) {
+                    setIsAuthenticated(true);
+                    setUser({
+                      userId: data.userId,
+                      email: data.email || 'user@example.com',
+                      name: data.name,
+                      pictureUrl: data.pictureUrl
+                    });
+                    return;
+                  }
+                }
+              }
+            }
+          } catch (refreshError) {
+            console.error('Token refresh failed:', refreshError);
+          }
+        }
+        
         // Session expired - clear auth state
         setIsAuthenticated(false);
         setUser(null);
@@ -79,10 +161,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include' // Include session cookie for authentication
+        credentials: 'include' // Include refresh token cookie
       });
 
       if (response.ok) {
+        // Clear access token from memory and sessionStorage
+        accessToken = null;
+        sessionStorage.removeItem('access_token');
         setIsAuthenticated(false);
         setUser(null);
         setError(null);
@@ -96,8 +181,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const getAccessToken = () => accessToken;
+
   return (
-    <AuthContext.Provider value={{ isAuthenticated, user, isLoading, login, logout, error }}>
+    <AuthContext.Provider value={{ isAuthenticated, user, isLoading, login, logout, error, getAccessToken }}>
       {children}
     </AuthContext.Provider>
   );

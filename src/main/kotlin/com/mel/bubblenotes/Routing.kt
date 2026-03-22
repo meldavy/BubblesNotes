@@ -34,7 +34,7 @@ fun Application.configureRouting() {
     routing {
         // Configure authentication challenge handling for protected routes
         // When a user is not authenticated on a protected route, return 401 instead of redirecting
-        authenticate("session-auth") {
+        authenticate("jwt-auth") {
             // This block will handle all protected API routes
             // If authentication fails, Ktor will automatically return 401 Unauthorized
         }

@@ -8,6 +8,18 @@ import org.flywaydb.core.Flyway
 import java.sql.Connection
 
 class DatabaseService(private val dataSource: HikariDataSource) {
+    /**
+     * Returns the underlying HikariDataSource.
+     * Repositories should use this to get fresh connections from the pool for each operation.
+     */
+    fun getDataSource(): HikariDataSource = dataSource
+
+    /**
+     * @deprecated Use getDataSource() instead and get a fresh connection for each operation.
+     * Storing a single connection across requests causes "Connection is closed" errors because
+     * HikariCP may close idle connections after maxLifetime or idleTimeout.
+     */
+    @Deprecated("Use getDataSource() instead", ReplaceWith("getDataSource().connection"))
     fun getConnection(): Connection = dataSource.connection
 }
 
@@ -56,12 +68,18 @@ fun Application.configureDatabases() {
             password = dbPassword
             maximumPoolSize = dbPoolSize
             minimumIdle = dbMinIdle
-            // Connection validation - test query before returning connection from pool
+            // Connection validation - use SELECT 1 to test connections before borrowing
+            // This is more reliable than JDBC 4's isValid() for some PostgreSQL drivers
             connectionTestQuery = "SELECT 1"
-            // Max lifetime of a connection (30 minutes) - should be less than DB server timeout
-            maxLifetime = 1800000L
-            // Idle timeout (10 minutes) - remove idle connections proactively
-            idleTimeout = 600000L
+            // Leak detection - log warning if connection held longer than this (0 = disabled)
+            // Set to 0 in production, enable in development for debugging
+            leakDetectionThreshold = 0L
+            // Max lifetime of a connection (4 minutes) - MUST be less than DB server timeout
+            // Cloud PostgreSQL (AWS RDS, Heroku, etc.) typically has 5-10 minute idle timeout
+            // Setting to 4 minutes (240000ms) ensures we close before server does
+            maxLifetime = 240000L
+            // Idle timeout (3 minutes) - must be less than maxLifetime
+            idleTimeout = 180000L
             // Connection timeout (30 seconds) - fail fast if pool is exhausted
             connectionTimeout = 30000L
         }

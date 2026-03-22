@@ -40,6 +40,10 @@ private val CONFIG_TO_ENV_MAP =
         "ai.openai.request-timeout" to "AI_REQUEST_TIMEOUT",
         // CORS allowed origin (full URL)
         "origin" to "ORIGIN",
+        // JWT authentication
+        "jwt.secret-key" to "JWT_SECRET_KEY",
+        "jwt.access-token-ttl" to "JWT_ACCESS_TTL",
+        "jwt.refresh-token-ttl" to "JWT_REFRESH_TTL",
     )
 
 /**
@@ -119,6 +123,12 @@ fun Application.logEnvironmentVariables() {
                 "origin" -> {
                     missingCriticalVars.add(envVarName)
                 }
+                "jwt.secret-key" -> {
+                    // JWT secret key is critical for authentication
+                    if (value.isNullOrBlank()) {
+                        missingCriticalVars.add(envVarName)
+                    }
+                }
                 "encryption.key", "encryption.session-key" -> {
                     // Check if using dev defaults
                     if (value?.contains("dev-") == true || value?.contains("!!") == true) {
@@ -139,6 +149,9 @@ fun Application.logEnvironmentVariables() {
                 }
                 value == "jdbc:h2:mem:bubblesnotes" -> {
                     usingDefaults.add("$envVarName (using H2 in-memory database)")
+                }
+                value != null && value.contains("default-test-jwt-secret-key") -> {
+                    usingDefaults.add("$envVarName (using insecure dev default)")
                 }
             }
         }

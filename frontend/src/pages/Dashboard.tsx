@@ -12,7 +12,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { NoteCard, Note } from '../components/NoteCard';
 
 export const Dashboard: React.FC = () => {
-    const { isAuthenticated } = useAuth();
+    const { isAuthenticated, getAccessToken } = useAuth();
     const [noteContent, setNoteContent] = useState('');
     const [noteTitle, setNoteTitle] = useState('');
     const [isSaving, setIsSaving] = useState(false);
@@ -28,6 +28,19 @@ export const Dashboard: React.FC = () => {
     const hasInitialLoaded = useRef(false);
     const [noteTags, setNoteTags] = useState<string[]>([]);
     
+    // Helper function to get headers with JWT token
+    const getAuthHeaders = (includeContentType: boolean = true): Record<string, string> => {
+        const headers: Record<string, string> = {};
+        const token = getAccessToken();
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        if (includeContentType) {
+            headers['Content-Type'] = 'application/json';
+        }
+        return headers;
+    };
+    
     // Search state
     const [searchQuery, setSearchQuery] = useState('');
     const [isSearching, setIsSearching] = useState(false);
@@ -35,6 +48,9 @@ export const Dashboard: React.FC = () => {
     const [selectedTag, setSelectedTag] = useState<string | null>(null);
     const [showLoading, setShowLoading] = useState(false);
     const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // Refs to access latest values in fetchNotes without recreating the callback
+    const searchQueryRef = useRef<string>(searchQuery);
+    const selectedTagRef = useRef<string | null>(selectedTag);
     
 
     const fetchNotes = useCallback(async (isInitialLoad: boolean = false, append: boolean = false) => {
@@ -48,28 +64,30 @@ export const Dashboard: React.FC = () => {
 
         try {
             // Set loading state for initial load or refresh (not append)
-            if (isInitialLoad || (!append && (searchQuery.trim() || selectedTag))) {
+            // Always show loading when fetching (except for append/pagination)
+            if (!append) {
                 setIsLoading(true);
                 // Show loading skeleton only after a short delay to prevent flicker
                 loadingTimeoutRef.current = setTimeout(() => {
                     setShowLoading(true);
                 }, 200);
-            } else if (!append) {
+            } else {
                 setIsLoadingMore(true);
             }
             setError(null);
 
             // Determine which API to call based on search state
-            if (searchQuery.trim()) {
+            const currentSearchQuery = searchQueryRef.current;
+            const currentSelectedTag = selectedTagRef.current;
+            
+            if (currentSearchQuery.trim()) {
                 // Use search API
                 const response = await fetch('/api/v1/search', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: getAuthHeaders(),
                     credentials: 'include',
                     body: JSON.stringify({
-                        query: searchQuery.trim(),
+                        query: currentSearchQuery.trim(),
                         limit: 20,
                         cursor: nextCursor !== null ? nextCursor : undefined
                     })
@@ -96,17 +114,18 @@ export const Dashboard: React.FC = () => {
                     const minId = Math.min(...searchResults.map((n: Note) => n.id));
                     setNextCursor(minId);
                 }
-            } else if (selectedTag) {
+            } else if (currentSelectedTag) {
                 // Use tag filter API
                 const url = new URL('/api/v1/notes', window.location.origin);
                 url.searchParams.set('limit', '20');
-                url.searchParams.set('tag', selectedTag);
+                url.searchParams.set('tag', currentSelectedTag);
                 
                 if (nextCursor !== null && !isInitialLoad) {
                     url.searchParams.set('cursor', nextCursor.toString());
                 }
 
                 const response = await fetch(url.toString(), {
+                    headers: getAuthHeaders(false),
                     credentials: 'include'
                 });
 
@@ -140,6 +159,7 @@ export const Dashboard: React.FC = () => {
                 }
 
                 const response = await fetch(url.toString(), {
+                    headers: getAuthHeaders(false),
                     credentials: 'include'
                 });
 
@@ -172,19 +192,25 @@ export const Dashboard: React.FC = () => {
                 loadingTimeoutRef.current = null;
             }
             // Set loading false for initial load or refresh (not append)
-            if (isInitialLoad || (!append && (searchQuery.trim() || selectedTag))) {
+            if (!append) {
                 setIsLoading(false);
                 setShowLoading(false);
-            } else if (!append) {
+            } else {
                 setIsLoadingMore(false);
             }
         }
-    }, [nextCursor, searchQuery, selectedTag]);
+    }, [nextCursor]);
 
     // Fetch tags for the tag filter dropdown
     const fetchTags = useCallback(async () => {
         try {
+            const token = getAccessToken();
+            if (!token) {
+                console.warn('No access token available, skipping tags fetch');
+                return;
+            }
             const response = await fetch('/api/v1/tags', {
+                headers: getAuthHeaders(false),
                 credentials: 'include'
             });
             if (response.ok) {
@@ -194,7 +220,7 @@ export const Dashboard: React.FC = () => {
         } catch (err) {
             console.error('Failed to fetch tags:', err);
         }
-    }, []);
+    }, [getAccessToken]);
 
     // Trigger search when searchQuery changes (debounced)
     useEffect(() => {
@@ -210,14 +236,14 @@ export const Dashboard: React.FC = () => {
         return () => {
             clearTimeout(debounceTimer);
         };
-    }, [searchQuery, selectedTag, isAuthenticated, fetchNotes]);
+    }, [searchQuery, selectedTag, isAuthenticated]);
 
     useEffect(() => {
         if (isAuthenticated && !hasInitialLoaded.current) {
             fetchNotes(true);
             fetchTags();
         }
-    }, [isAuthenticated, fetchNotes, fetchTags]);
+    }, [isAuthenticated, fetchTags]);
 
     // Reset search when authentication changes
     useEffect(() => {
@@ -229,6 +255,12 @@ export const Dashboard: React.FC = () => {
         }
     }, [isAuthenticated]);
 
+    // Keep refs in sync with state values
+    useEffect(() => {
+        searchQueryRef.current = searchQuery;
+        selectedTagRef.current = selectedTag;
+    }, [searchQuery, selectedTag]);
+
     // Cleanup loading timeout on unmount
     useEffect(() => {
         return () => {
@@ -239,108 +271,24 @@ export const Dashboard: React.FC = () => {
     }, []);
 
     // Handle search submission
-    const handleSearch = async (query: string) => {
+    const handleSearch = (query: string) => {
         setSearchQuery(query);
         setSelectedTag(null); // Clear tag filter when searching
         setNextCursor(null); // Reset pagination
-        
-        // Directly fetch search results
-        setIsLoading(true);
-        setShowLoading(true);
-        setError(null);
-        try {
-            const response = await fetch('/api/v1/search', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                credentials: 'include',
-                body: JSON.stringify({
-                    query: query.trim(),
-                    limit: 20,
-                })
-            });
-            
-            if (!response.ok) {
-                throw new Error('Failed to search notes');
-            }
-            
-            const data = await response.json();
-            const searchResults = data.results || [];
-            setNotes(searchResults);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'An error occurred');
-        } finally {
-            setIsLoading(false);
-            setShowLoading(false);
-        }
     };
 
     // Handle tag selection
-    const handleTagSelect = async (tag: string | null) => {
+    const handleTagSelect = (tag: string | null) => {
         setSelectedTag(tag);
-        setSearchQuery(''); // Clear search when selecting tag
+        setSearchQuery(tag || ''); // Use tag as search query to trigger search API
         setNextCursor(null); // Reset pagination
-        
-        // Directly fetch notes by tag
-        setIsLoading(true);
-        setShowLoading(true);
-        setError(null);
-        try {
-            const url = new URL('/api/v1/notes', window.location.origin);
-            url.searchParams.set('limit', '20');
-            if (tag) {
-                url.searchParams.set('tag', tag);
-            }
-            
-            const response = await fetch(url.toString(), {
-                credentials: 'include'
-            });
-            
-            if (!response.ok) {
-                throw new Error('Failed to fetch notes');
-            }
-            
-            const data = await response.json();
-            setNotes(data);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'An error occurred');
-        } finally {
-            setIsLoading(false);
-            setShowLoading(false);
-        }
     };
 
     // Clear search and filter
-    const handleClearSearch = async () => {
+    const handleClearSearch = () => {
         setSearchQuery('');
         setSelectedTag(null);
         setNextCursor(null);
-        
-        // Directly fetch all notes
-        setIsLoading(true);
-        setShowLoading(true);
-        setError(null);
-        try {
-            const url = new URL('/api/v1/notes', window.location.origin);
-            url.searchParams.set('limit', '20');
-            
-            const response = await fetch(url.toString(), {
-                credentials: 'include'
-            });
-            
-            if (!response.ok) {
-                throw new Error('Failed to fetch notes');
-            }
-            
-            const data = await response.json();
-            setNotes(data);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'An error occurred');
-        } finally {
-            setIsLoading(false);
-            setShowLoading(false);
-        }
     };
 
     const handleSaveNote = async () => {
@@ -364,9 +312,7 @@ export const Dashboard: React.FC = () => {
 
                 const response = await fetch(`/api/v1/notes/${editingNoteId}`, {
                     method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: getAuthHeaders(),
                     credentials: 'include',
                     body: JSON.stringify({
                         content: noteContent,
@@ -407,9 +353,7 @@ export const Dashboard: React.FC = () => {
 
                 const response = await fetch('/api/v1/notes', {
                       method: 'POST',
-                      headers: {
-                          'Content-Type': 'application/json',
-                      },
+                      headers: getAuthHeaders(),
                       credentials: 'include',
                       body: JSON.stringify({
                           content: noteContent,
@@ -471,6 +415,7 @@ export const Dashboard: React.FC = () => {
         try {
             const response = await fetch(`/api/v1/notes/${noteId}`, {
                 method: 'DELETE',
+                headers: getAuthHeaders(false),
                 credentials: 'include'
             });
 
@@ -500,7 +445,7 @@ export const Dashboard: React.FC = () => {
         if (nextCursor !== null && !isLoadingMore) {
             fetchNotes(false, true);
         }
-    }, [nextCursor, isLoadingMore, fetchNotes]);
+    }, [nextCursor, isLoadingMore]);
 
     const handleTouchStart = (e: React.TouchEvent) => {
         if (window.scrollY === 0) {

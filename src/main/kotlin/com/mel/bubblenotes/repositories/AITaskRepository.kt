@@ -1,5 +1,6 @@
 package com.mel.bubblenotes.repositories
 
+import com.zaxxer.hikari.HikariDataSource
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -9,8 +10,15 @@ import java.sql.Connection
  * Repository for AI task queue operations.
  * Follows testability constitution: class is open for mocking in tests.
  */
-open class AITaskRepository(private val connection: Connection) {
+open class AITaskRepository(private val dataSource: HikariDataSource) {
     private val json = Json { ignoreUnknownKeys = true }
+
+    /**
+     * Get a fresh connection from the pool for each database operation.
+     * This prevents "Connection is closed" errors that occur when storing
+     * a single connection across multiple requests.
+     */
+    private fun getConnection(): Connection = dataSource.connection
 
     /**
      * AI task status enum.
@@ -44,14 +52,17 @@ open class AITaskRepository(private val connection: Connection) {
             VALUES (?, 'pending')
             """.trimIndent()
 
-        connection.prepareStatement(sql, java.sql.Statement.RETURN_GENERATED_KEYS).use { stmt ->
-            stmt.setLong(1, noteId)
-            stmt.executeUpdate()
-            val rs = stmt.generatedKeys
-            if (rs.next()) {
-                return rs.getLong(1)
+        getConnection().use { conn ->
+            conn.prepareStatement(sql, java.sql.Statement.RETURN_GENERATED_KEYS).use { stmt ->
+                stmt.setLong(1, noteId)
+                stmt.executeUpdate()
+                stmt.generatedKeys.use { rs ->
+                    if (rs.next()) {
+                        return rs.getLong(1)
+                    }
+                }
+                throw Exception("Failed to create AI task")
             }
-            throw Exception("Failed to create AI task")
         }
     }
 
@@ -67,25 +78,27 @@ open class AITaskRepository(private val connection: Connection) {
             FROM ai_tasks WHERE id = ?
             """.trimIndent()
 
-        connection.prepareStatement(sql).use { stmt ->
-            stmt.setLong(1, taskId)
-            val rs = stmt.executeQuery()
-
-            if (rs.next()) {
-                return AITask(
-                    id = rs.getLong("id"),
-                    noteId = rs.getLong("note_id"),
-                    status = Status.valueOf(rs.getString("status").uppercase()),
-                    result = rs.getString("result")?.let { json.decodeFromString<AITaskResult>(it) },
-                    errorMessage = rs.getString("error_message"),
-                    startedAt = rs.getLongOrNull("started_at"),
-                    completedAt = rs.getLongOrNull("completed_at"),
-                    workerId = rs.getString("worker_id"),
-                    lockedAt = rs.getLongOrNull("locked_at"),
-                    lockTimeout = rs.getLongOrNull("lock_timeout"),
-                )
+        getConnection().use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.setLong(1, taskId)
+                stmt.executeQuery().use { rs ->
+                    if (rs.next()) {
+                        return AITask(
+                            id = rs.getLong("id"),
+                            noteId = rs.getLong("note_id"),
+                            status = Status.valueOf(rs.getString("status").uppercase()),
+                            result = rs.getString("result")?.let { json.decodeFromString<AITaskResult>(it) },
+                            errorMessage = rs.getString("error_message"),
+                            startedAt = rs.getLongOrNull("started_at"),
+                            completedAt = rs.getLongOrNull("completed_at"),
+                            workerId = rs.getString("worker_id"),
+                            lockedAt = rs.getLongOrNull("locked_at"),
+                            lockTimeout = rs.getLongOrNull("lock_timeout"),
+                        )
+                    }
+                    return null
+                }
             }
-            return null
         }
     }
 
@@ -106,25 +119,28 @@ open class AITaskRepository(private val connection: Connection) {
             LIMIT $limit
             """.trimIndent()
 
-        connection.prepareStatement(sql).use { stmt ->
-            stmt.setLong(1, currentTime)
-            val rs = stmt.executeQuery()
-            return buildList {
-                while (rs.next()) {
-                    add(
-                        AITask(
-                            id = rs.getLong("id"),
-                            noteId = rs.getLong("note_id"),
-                            status = Status.valueOf(rs.getString("status").uppercase()),
-                            result = rs.getString("result")?.let { json.decodeFromString<AITaskResult>(it) },
-                            errorMessage = rs.getString("error_message"),
-                            startedAt = rs.getLongOrNull("started_at"),
-                            completedAt = rs.getLongOrNull("completed_at"),
-                            workerId = rs.getString("worker_id"),
-                            lockedAt = rs.getLongOrNull("locked_at"),
-                            lockTimeout = rs.getLongOrNull("lock_timeout"),
-                        ),
-                    )
+        getConnection().use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.setLong(1, currentTime)
+                stmt.executeQuery().use { rs ->
+                    return buildList {
+                        while (rs.next()) {
+                            add(
+                                AITask(
+                                    id = rs.getLong("id"),
+                                    noteId = rs.getLong("note_id"),
+                                    status = Status.valueOf(rs.getString("status").uppercase()),
+                                    result = rs.getString("result")?.let { json.decodeFromString<AITaskResult>(it) },
+                                    errorMessage = rs.getString("error_message"),
+                                    startedAt = rs.getLongOrNull("started_at"),
+                                    completedAt = rs.getLongOrNull("completed_at"),
+                                    workerId = rs.getString("worker_id"),
+                                    lockedAt = rs.getLongOrNull("locked_at"),
+                                    lockTimeout = rs.getLongOrNull("lock_timeout"),
+                                ),
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -147,13 +163,15 @@ open class AITaskRepository(private val connection: Connection) {
             WHERE id = ? AND status = 'pending'
             """.trimIndent()
 
-        connection.prepareStatement(sql).use { stmt ->
-            stmt.setLong(1, System.currentTimeMillis())
-            stmt.setString(2, workerId)
-            stmt.setLong(3, System.currentTimeMillis())
-            stmt.setLong(4, lockTimeout)
-            stmt.setLong(5, taskId)
-            return stmt.executeUpdate() > 0
+        getConnection().use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.setLong(1, System.currentTimeMillis())
+                stmt.setString(2, workerId)
+                stmt.setLong(3, System.currentTimeMillis())
+                stmt.setLong(4, lockTimeout)
+                stmt.setLong(5, taskId)
+                return stmt.executeUpdate() > 0
+            }
         }
     }
 
@@ -174,11 +192,13 @@ open class AITaskRepository(private val connection: Connection) {
             WHERE id = ?
             """.trimIndent()
 
-        connection.prepareStatement(sql).use { stmt ->
-            stmt.setString(1, json.encodeToString(result))
-            stmt.setLong(2, System.currentTimeMillis())
-            stmt.setLong(3, taskId)
-            return stmt.executeUpdate() > 0
+        getConnection().use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.setString(1, json.encodeToString(result))
+                stmt.setLong(2, System.currentTimeMillis())
+                stmt.setLong(3, taskId)
+                return stmt.executeUpdate() > 0
+            }
         }
     }
 
@@ -199,11 +219,13 @@ open class AITaskRepository(private val connection: Connection) {
             WHERE id = ?
             """.trimIndent()
 
-        connection.prepareStatement(sql).use { stmt ->
-            stmt.setString(1, errorMessage)
-            stmt.setLong(2, System.currentTimeMillis())
-            stmt.setLong(3, taskId)
-            return stmt.executeUpdate() > 0
+        getConnection().use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.setString(1, errorMessage)
+                stmt.setLong(2, System.currentTimeMillis())
+                stmt.setLong(3, taskId)
+                return stmt.executeUpdate() > 0
+            }
         }
     }
 
@@ -221,9 +243,11 @@ open class AITaskRepository(private val connection: Connection) {
             WHERE id = ?
             """.trimIndent()
 
-        connection.prepareStatement(sql).use { stmt ->
-            stmt.setLong(1, taskId)
-            return stmt.executeUpdate() > 0
+        getConnection().use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.setLong(1, taskId)
+                return stmt.executeUpdate() > 0
+            }
         }
     }
 
@@ -235,7 +259,7 @@ open class AITaskRepository(private val connection: Connection) {
     fun delete(taskId: Long): Boolean {
         val sql = "DELETE FROM ai_tasks WHERE id = ?"
 
-        connection.prepareStatement(sql).use { stmt ->
+        getConnection().prepareStatement(sql).use { stmt ->
             stmt.setLong(1, taskId)
             return stmt.executeUpdate() > 0
         }
@@ -249,9 +273,11 @@ open class AITaskRepository(private val connection: Connection) {
     fun deleteOlderThan(olderThan: Long): Int {
         val sql = "DELETE FROM ai_tasks WHERE completed_at < ?"
 
-        connection.prepareStatement(sql).use { stmt ->
-            stmt.setLong(1, olderThan)
-            return stmt.executeUpdate()
+        getConnection().use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.setLong(1, olderThan)
+                return stmt.executeUpdate()
+            }
         }
     }
 }

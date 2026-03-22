@@ -12,11 +12,13 @@ import com.mel.bubblenotes.repositories.AITaskRepository
 import com.mel.bubblenotes.repositories.AttachmentRepository
 import com.mel.bubblenotes.repositories.NoteRepository
 import com.mel.bubblenotes.repositories.NoteTagRepository
+import com.mel.bubblenotes.repositories.RefreshTokenRepository
 import com.mel.bubblenotes.repositories.TagRepository
 import com.mel.bubblenotes.repositories.UserRepository
 import com.mel.bubblenotes.services.AIEnhancementService
 import com.mel.bubblenotes.services.ApiKeyService
 import com.mel.bubblenotes.services.EncryptionService
+import com.mel.bubblenotes.services.JWTTokenService
 import com.mel.bubblenotes.services.OpenAIClient
 import com.mel.bubblenotes.services.SessionStorage
 import com.mel.bubblenotes.services.TagService
@@ -65,38 +67,68 @@ class ApplicationModule(
 
     @Provides
     @Singleton
+    fun provideApplicationConfig(): ApplicationConfig {
+        return config
+    }
+
+    @Provides
+    @Singleton
     fun provideNoteRepository(): NoteRepository {
-        return NoteRepository(databaseService.getConnection())
+        return NoteRepository(databaseService.getDataSource())
     }
 
     @Provides
     @Singleton
     fun provideTagRepository(): TagRepository {
-        return TagRepository(databaseService.getConnection())
+        return TagRepository(databaseService.getDataSource())
     }
 
     @Provides
     @Singleton
     fun provideAttachmentRepository(): AttachmentRepository {
-        return AttachmentRepository(databaseService.getConnection())
+        return AttachmentRepository(databaseService.getDataSource())
     }
 
     @Provides
     @Singleton
     fun provideUserRepository(): UserRepository {
-        return UserRepository(databaseService.getConnection())
+        return UserRepository(databaseService.getDataSource())
+    }
+
+    @Provides
+    @Singleton
+    fun provideRefreshTokenRepository(): RefreshTokenRepository {
+        return RefreshTokenRepository(databaseService.getDataSource())
+    }
+
+    @Provides
+    @Singleton
+    fun provideJWTTokenService(
+        refreshTokenRepository: RefreshTokenRepository,
+        config: ApplicationConfig,
+    ): JWTTokenService {
+        val secretKey = getRequiredConfigProperty("jwt.secret-key").toByteArray()
+        val accessTokenTtl = getRequiredConfigProperty("jwt.access-token-ttl").toLongOrNull() ?: 900L
+        val refreshTokenTtl = getRequiredConfigProperty("jwt.refresh-token-ttl").toLongOrNull() ?: 604800L
+
+        return JWTTokenService(
+            refreshTokenRepository = refreshTokenRepository,
+            secretKey = secretKey,
+            accessTokenTtlSeconds = accessTokenTtl,
+            refreshTokenTtlSeconds = refreshTokenTtl,
+        )
     }
 
     @Provides
     @Singleton
     fun provideNoteTagRepository(): NoteTagRepository {
-        return NoteTagRepository(databaseService.getConnection())
+        return NoteTagRepository(databaseService.getDataSource())
     }
 
     @Provides
     @Singleton
     fun provideAITaskRepository(): AITaskRepository {
-        return AITaskRepository(databaseService.getConnection())
+        return AITaskRepository(databaseService.getDataSource())
     }
 
     @Provides

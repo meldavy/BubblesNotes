@@ -1,9 +1,13 @@
 package com.mel.bubblenotes.api
 
-import com.mel.bubblenotes.UserId
-import com.mel.bubblenotes.UserSession
+import com.auth0.jwt.JWT
+import com.auth0.jwt.algorithms.Algorithm
+import com.mel.bubblenotes.JWTPrincipal
 import com.mel.bubblenotes.models.Note
 import com.mel.bubblenotes.repositories.NoteRepository
+import com.mel.bubblenotes.repositories.RefreshTokenRepository
+import com.mel.bubblenotes.repositories.UserRepository
+import com.mel.bubblenotes.services.JWTTokenService
 import com.mel.bubblenotes.services.URLPreview
 import com.mel.bubblenotes.services.URLPreviewService
 import com.zaxxer.hikari.HikariConfig
@@ -14,9 +18,9 @@ import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
+import io.ktor.server.auth.jwt.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.routing.*
-import io.ktor.server.sessions.*
 import io.ktor.server.testing.*
 import kotlinx.serialization.json.Json
 import org.flywaydb.core.Flyway
@@ -30,6 +34,8 @@ import kotlin.test.assertTrue
 class NotesApiIntegrationTest {
     private lateinit var dataSource: HikariDataSource
     private lateinit var noteRepository: NoteRepository
+    private lateinit var userRepository: UserRepository
+    private lateinit var jwtTokenService: JWTTokenService
     private val testUserId = UUID.randomUUID()
     private val jsonSerializer =
         Json {
@@ -37,15 +43,8 @@ class NotesApiIntegrationTest {
             isLenient = true
         }
 
-    private fun getSessionCookie(userId: String): String {
-        return jsonSerializer.encodeToString(
-            UserSession(
-                userId = userId,
-                email = "test@example.com",
-                oauthToken = "test-token",
-                expiresAt = System.currentTimeMillis() + 86400000,
-            ),
-        )
+    private fun createAccessToken(userId: UUID): String {
+        return jwtTokenService.createTokenPair(userId).accessToken
     }
 
     @BeforeTest
@@ -56,6 +55,9 @@ class NotesApiIntegrationTest {
                 jdbcUrl = "jdbc:h2:mem:test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL"
                 username = "sa"
                 password = ""
+                // Increase pool size to handle concurrent test operations
+                maximumPoolSize = 10
+                minimumIdle = 2
             }
         dataSource = HikariDataSource(hikariConfig)
 
@@ -85,7 +87,7 @@ class NotesApiIntegrationTest {
 
         // Create test user
         dataSource.connection.prepareStatement(
-            """INSERT INTO users (id, email, name, oauth_token, encryption_salt, api_key, created_at, updated_at) 
+            """INSERT INTO users (id, email, name, oauth_token, encryption_salt, api_key, created_at, updated_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
         ).use { stmt ->
             stmt.setObject(1, testUserId)
@@ -104,8 +106,17 @@ class NotesApiIntegrationTest {
             stmt.execute("SET REFERENTIAL_INTEGRITY TRUE")
         }
 
-        // Initialize repository
-        noteRepository = NoteRepository(dataSource.connection)
+        // Initialize repositories
+        noteRepository = NoteRepository(dataSource)
+        userRepository = UserRepository(dataSource)
+        val refreshTokenRepository = RefreshTokenRepository(dataSource)
+        jwtTokenService =
+            JWTTokenService(
+                refreshTokenRepository = refreshTokenRepository,
+                secretKey = "test-jwt-secret-key-for-testing-only-32bytes!!!!".toByteArray(),
+                accessTokenTtlSeconds = 3600,
+                refreshTokenTtlSeconds = 604800,
+            )
     }
 
     @AfterTest
@@ -116,19 +127,7 @@ class NotesApiIntegrationTest {
     @Test
     fun `test create note`() =
         testApplication {
-            val mockUserId = testUserId.toString()
-
             application {
-                install(Sessions) {
-                    cookie<UserSession>("session-auth") {
-                        cookie.path = "/"
-                        cookie.maxAgeInSeconds = 86400
-                        cookie.httpOnly = true
-                        cookie.secure = false
-                        cookie.extensions["SameSite"] = "Lax"
-                    }
-                }
-
                 install(io.ktor.server.plugins.contentnegotiation.ContentNegotiation) {
                     json(
                         Json {
@@ -138,10 +137,27 @@ class NotesApiIntegrationTest {
                     )
                 }
 
+                // Configure JWT authentication for testing
                 install(Authentication) {
-                    session<UserSession>("session-auth") {
-                        validate { session ->
-                            UserId(session.userId)
+                    jwt("jwt-auth") {
+                        verifier(
+                            JWT.require(Algorithm.HMAC256("test-jwt-secret-key-for-testing-only-32bytes!!!!".toByteArray()))
+                                .build(),
+                        )
+                        validate { credentials ->
+                            val userIdString = credentials.payload.subject
+                            val userId =
+                                try {
+                                    UUID.fromString(userIdString)
+                                } catch (e: Exception) {
+                                    return@validate null
+                                }
+                            val user = userRepository.findById(userId)
+                            if (user != null) {
+                                JWTPrincipal(userId, user.email)
+                            } else {
+                                null
+                            }
                         }
                     }
                 }
@@ -166,10 +182,12 @@ class NotesApiIntegrationTest {
                     }
                 }
 
+            val accessToken = createAccessToken(testUserId)
+
             val response =
                 client.post("/api/v1/notes") {
                     contentType(ContentType.Application.Json)
-                    cookie("session-auth", getSessionCookie(mockUserId))
+                    header("Authorization", "Bearer $accessToken")
                     setBody(NoteCreationRequest(title = "Test Note", content = "This is test content"))
                 }
 
@@ -204,19 +222,7 @@ class NotesApiIntegrationTest {
                 noteRepository.create(note)
             }
 
-            val mockUserId = testUserId.toString()
-
             application {
-                install(Sessions) {
-                    cookie<UserSession>("session-auth") {
-                        cookie.path = "/"
-                        cookie.maxAgeInSeconds = 86400
-                        cookie.httpOnly = true
-                        cookie.secure = false
-                        cookie.extensions["SameSite"] = "Lax"
-                    }
-                }
-
                 install(io.ktor.server.plugins.contentnegotiation.ContentNegotiation) {
                     json(
                         Json {
@@ -226,10 +232,27 @@ class NotesApiIntegrationTest {
                     )
                 }
 
+                // Configure JWT authentication for testing
                 install(Authentication) {
-                    session<UserSession>("session-auth") {
-                        validate { session ->
-                            UserId(mockUserId)
+                    jwt("jwt-auth") {
+                        verifier(
+                            JWT.require(Algorithm.HMAC256("test-jwt-secret-key-for-testing-only-32bytes!!!!".toByteArray()))
+                                .build(),
+                        )
+                        validate { credentials ->
+                            val userIdString = credentials.payload.subject
+                            val userId =
+                                try {
+                                    UUID.fromString(userIdString)
+                                } catch (e: Exception) {
+                                    return@validate null
+                                }
+                            val user = userRepository.findById(userId)
+                            if (user != null) {
+                                JWTPrincipal(userId, user.email)
+                            } else {
+                                null
+                            }
                         }
                     }
                 }
@@ -254,9 +277,11 @@ class NotesApiIntegrationTest {
                     }
                 }
 
+            val accessToken = createAccessToken(testUserId)
+
             val response =
                 client.get("/api/v1/notes?limit=3") {
-                    cookie("session-auth", getSessionCookie(mockUserId))
+                    header("Authorization", "Bearer $accessToken")
                 }
             assertEquals(HttpStatusCode.OK, response.status)
 
@@ -285,19 +310,7 @@ class NotesApiIntegrationTest {
                 noteRepository.create(note)
             }
 
-            val mockUserId = testUserId.toString()
-
             application {
-                install(Sessions) {
-                    cookie<UserSession>("session-auth") {
-                        cookie.path = "/"
-                        cookie.maxAgeInSeconds = 86400
-                        cookie.httpOnly = true
-                        cookie.secure = false
-                        cookie.extensions["SameSite"] = "Lax"
-                    }
-                }
-
                 install(io.ktor.server.plugins.contentnegotiation.ContentNegotiation) {
                     json(
                         Json {
@@ -307,10 +320,27 @@ class NotesApiIntegrationTest {
                     )
                 }
 
+                // Configure JWT authentication for testing
                 install(Authentication) {
-                    session<UserSession>("session-auth") {
-                        validate { session ->
-                            UserId(mockUserId)
+                    jwt("jwt-auth") {
+                        verifier(
+                            JWT.require(Algorithm.HMAC256("test-jwt-secret-key-for-testing-only-32bytes!!!!".toByteArray()))
+                                .build(),
+                        )
+                        validate { credentials ->
+                            val userIdString = credentials.payload.subject
+                            val userId =
+                                try {
+                                    UUID.fromString(userIdString)
+                                } catch (e: Exception) {
+                                    return@validate null
+                                }
+                            val user = userRepository.findById(userId)
+                            if (user != null) {
+                                JWTPrincipal(userId, user.email)
+                            } else {
+                                null
+                            }
                         }
                     }
                 }
@@ -335,9 +365,11 @@ class NotesApiIntegrationTest {
                     }
                 }
 
+            val accessToken = createAccessToken(testUserId)
+
             val firstResponse =
                 client.get("/api/v1/notes?limit=5") {
-                    cookie("session-auth", getSessionCookie(mockUserId))
+                    header("Authorization", "Bearer $accessToken")
                 }
             assertEquals(HttpStatusCode.OK, firstResponse.status)
             val firstPageNotes = jsonSerializer.decodeFromString<List<Note>>(firstResponse.bodyAsText())
@@ -347,7 +379,7 @@ class NotesApiIntegrationTest {
 
             val secondResponse =
                 client.get("/api/v1/notes?limit=5&cursor=$cursor") {
-                    cookie("session-auth", getSessionCookie(mockUserId))
+                    header("Authorization", "Bearer $accessToken")
                 }
             assertEquals(HttpStatusCode.OK, secondResponse.status)
             val secondPageNotes = jsonSerializer.decodeFromString<List<Note>>(secondResponse.bodyAsText())
@@ -374,19 +406,7 @@ class NotesApiIntegrationTest {
                 )
             val noteId = noteRepository.create(note)
 
-            val mockUserId = testUserId.toString()
-
             application {
-                install(Sessions) {
-                    cookie<UserSession>("session-auth") {
-                        cookie.path = "/"
-                        cookie.maxAgeInSeconds = 86400
-                        cookie.httpOnly = true
-                        cookie.secure = false
-                        cookie.extensions["SameSite"] = "Lax"
-                    }
-                }
-
                 install(io.ktor.server.plugins.contentnegotiation.ContentNegotiation) {
                     json(
                         Json {
@@ -396,10 +416,27 @@ class NotesApiIntegrationTest {
                     )
                 }
 
+                // Configure JWT authentication for testing
                 install(Authentication) {
-                    session<UserSession>("session-auth") {
-                        validate { session ->
-                            UserId(mockUserId)
+                    jwt("jwt-auth") {
+                        verifier(
+                            JWT.require(Algorithm.HMAC256("test-jwt-secret-key-for-testing-only-32bytes!!!!".toByteArray()))
+                                .build(),
+                        )
+                        validate { credentials ->
+                            val userIdString = credentials.payload.subject
+                            val userId =
+                                try {
+                                    UUID.fromString(userIdString)
+                                } catch (e: Exception) {
+                                    return@validate null
+                                }
+                            val user = userRepository.findById(userId)
+                            if (user != null) {
+                                JWTPrincipal(userId, user.email)
+                            } else {
+                                null
+                            }
                         }
                     }
                 }
@@ -424,9 +461,11 @@ class NotesApiIntegrationTest {
                     }
                 }
 
+            val accessToken = createAccessToken(testUserId)
+
             val response =
                 client.get("/api/v1/notes/$noteId") {
-                    cookie("session-auth", getSessionCookie(mockUserId))
+                    header("Authorization", "Bearer $accessToken")
                 }
             assertEquals(HttpStatusCode.OK, response.status)
 
@@ -440,19 +479,7 @@ class NotesApiIntegrationTest {
     @Test
     fun `test get non-existent note returns 404`() =
         testApplication {
-            val mockUserId = testUserId.toString()
-
             application {
-                install(Sessions) {
-                    cookie<UserSession>("session-auth") {
-                        cookie.path = "/"
-                        cookie.maxAgeInSeconds = 86400
-                        cookie.httpOnly = true
-                        cookie.secure = false
-                        cookie.extensions["SameSite"] = "Lax"
-                    }
-                }
-
                 install(io.ktor.server.plugins.contentnegotiation.ContentNegotiation) {
                     json(
                         Json {
@@ -462,10 +489,27 @@ class NotesApiIntegrationTest {
                     )
                 }
 
+                // Configure JWT authentication for testing
                 install(Authentication) {
-                    session<UserSession>("session-auth") {
-                        validate { session ->
-                            UserId(mockUserId)
+                    jwt("jwt-auth") {
+                        verifier(
+                            JWT.require(Algorithm.HMAC256("test-jwt-secret-key-for-testing-only-32bytes!!!!".toByteArray()))
+                                .build(),
+                        )
+                        validate { credentials ->
+                            val userIdString = credentials.payload.subject
+                            val userId =
+                                try {
+                                    UUID.fromString(userIdString)
+                                } catch (e: Exception) {
+                                    return@validate null
+                                }
+                            val user = userRepository.findById(userId)
+                            if (user != null) {
+                                JWTPrincipal(userId, user.email)
+                            } else {
+                                null
+                            }
                         }
                     }
                 }
@@ -490,9 +534,11 @@ class NotesApiIntegrationTest {
                     }
                 }
 
+            val accessToken = createAccessToken(testUserId)
+
             val response =
                 client.get("/api/v1/notes/999999") {
-                    cookie("session-auth", getSessionCookie(mockUserId))
+                    header("Authorization", "Bearer $accessToken")
                 }
             assertEquals(HttpStatusCode.NotFound, response.status)
         }
@@ -513,19 +559,7 @@ class NotesApiIntegrationTest {
                 )
             val noteId = noteRepository.create(note)
 
-            val mockUserId = testUserId.toString()
-
             application {
-                install(Sessions) {
-                    cookie<UserSession>("session-auth") {
-                        cookie.path = "/"
-                        cookie.maxAgeInSeconds = 86400
-                        cookie.httpOnly = true
-                        cookie.secure = false
-                        cookie.extensions["SameSite"] = "Lax"
-                    }
-                }
-
                 install(io.ktor.server.plugins.contentnegotiation.ContentNegotiation) {
                     json(
                         Json {
@@ -535,10 +569,27 @@ class NotesApiIntegrationTest {
                     )
                 }
 
+                // Configure JWT authentication for testing
                 install(Authentication) {
-                    session<UserSession>("session-auth") {
-                        validate { session ->
-                            UserId(mockUserId)
+                    jwt("jwt-auth") {
+                        verifier(
+                            JWT.require(Algorithm.HMAC256("test-jwt-secret-key-for-testing-only-32bytes!!!!".toByteArray()))
+                                .build(),
+                        )
+                        validate { credentials ->
+                            val userIdString = credentials.payload.subject
+                            val userId =
+                                try {
+                                    UUID.fromString(userIdString)
+                                } catch (e: Exception) {
+                                    return@validate null
+                                }
+                            val user = userRepository.findById(userId)
+                            if (user != null) {
+                                JWTPrincipal(userId, user.email)
+                            } else {
+                                null
+                            }
                         }
                     }
                 }
@@ -563,10 +614,12 @@ class NotesApiIntegrationTest {
                     }
                 }
 
+            val accessToken = createAccessToken(testUserId)
+
             val response =
                 client.put("/api/v1/notes/$noteId") {
                     contentType(ContentType.Application.Json)
-                    cookie("session-auth", getSessionCookie(mockUserId))
+                    header("Authorization", "Bearer $accessToken")
                     setBody(
                         NoteUpdateRequest(
                             title = "Updated Title",
@@ -602,19 +655,7 @@ class NotesApiIntegrationTest {
                 )
             val noteId = noteRepository.create(note)
 
-            val mockUserId = testUserId.toString()
-
             application {
-                install(Sessions) {
-                    cookie<UserSession>("session-auth") {
-                        cookie.path = "/"
-                        cookie.maxAgeInSeconds = 86400
-                        cookie.httpOnly = true
-                        cookie.secure = false
-                        cookie.extensions["SameSite"] = "Lax"
-                    }
-                }
-
                 install(io.ktor.server.plugins.contentnegotiation.ContentNegotiation) {
                     json(
                         Json {
@@ -624,10 +665,27 @@ class NotesApiIntegrationTest {
                     )
                 }
 
+                // Configure JWT authentication for testing
                 install(Authentication) {
-                    session<UserSession>("session-auth") {
-                        validate { session ->
-                            UserId(mockUserId)
+                    jwt("jwt-auth") {
+                        verifier(
+                            JWT.require(Algorithm.HMAC256("test-jwt-secret-key-for-testing-only-32bytes!!!!".toByteArray()))
+                                .build(),
+                        )
+                        validate { credentials ->
+                            val userIdString = credentials.payload.subject
+                            val userId =
+                                try {
+                                    UUID.fromString(userIdString)
+                                } catch (e: Exception) {
+                                    return@validate null
+                                }
+                            val user = userRepository.findById(userId)
+                            if (user != null) {
+                                JWTPrincipal(userId, user.email)
+                            } else {
+                                null
+                            }
                         }
                     }
                 }
@@ -652,10 +710,12 @@ class NotesApiIntegrationTest {
                     }
                 }
 
+            val accessToken = createAccessToken(testUserId)
+
             val response =
                 client.put("/api/v1/notes/$noteId") {
                     contentType(ContentType.Application.Json)
-                    cookie("session-auth", getSessionCookie(mockUserId))
+                    header("Authorization", "Bearer $accessToken")
                     setBody(
                         NoteUpdateRequest(
                             title = "New Title",
@@ -677,19 +737,7 @@ class NotesApiIntegrationTest {
     @Test
     fun `test update non-existent note returns 404`() =
         testApplication {
-            val mockUserId = testUserId.toString()
-
             application {
-                install(Sessions) {
-                    cookie<UserSession>("session-auth") {
-                        cookie.path = "/"
-                        cookie.maxAgeInSeconds = 86400
-                        cookie.httpOnly = true
-                        cookie.secure = false
-                        cookie.extensions["SameSite"] = "Lax"
-                    }
-                }
-
                 install(io.ktor.server.plugins.contentnegotiation.ContentNegotiation) {
                     json(
                         Json {
@@ -699,10 +747,27 @@ class NotesApiIntegrationTest {
                     )
                 }
 
+                // Configure JWT authentication for testing
                 install(Authentication) {
-                    session<UserSession>("session-auth") {
-                        validate { session ->
-                            UserId(mockUserId)
+                    jwt("jwt-auth") {
+                        verifier(
+                            JWT.require(Algorithm.HMAC256("test-jwt-secret-key-for-testing-only-32bytes!!!!".toByteArray()))
+                                .build(),
+                        )
+                        validate { credentials ->
+                            val userIdString = credentials.payload.subject
+                            val userId =
+                                try {
+                                    UUID.fromString(userIdString)
+                                } catch (e: Exception) {
+                                    return@validate null
+                                }
+                            val user = userRepository.findById(userId)
+                            if (user != null) {
+                                JWTPrincipal(userId, user.email)
+                            } else {
+                                null
+                            }
                         }
                     }
                 }
@@ -727,10 +792,12 @@ class NotesApiIntegrationTest {
                     }
                 }
 
+            val accessToken = createAccessToken(testUserId)
+
             val response =
                 client.put("/api/v1/notes/999999") {
                     contentType(ContentType.Application.Json)
-                    cookie("session-auth", getSessionCookie(mockUserId))
+                    header("Authorization", "Bearer $accessToken")
                     setBody(
                         NoteUpdateRequest(
                             title = "Updated Title",
@@ -759,19 +826,7 @@ class NotesApiIntegrationTest {
                 )
             val noteId = noteRepository.create(note)
 
-            val mockUserId = testUserId.toString()
-
             application {
-                install(Sessions) {
-                    cookie<UserSession>("session-auth") {
-                        cookie.path = "/"
-                        cookie.maxAgeInSeconds = 86400
-                        cookie.httpOnly = true
-                        cookie.secure = false
-                        cookie.extensions["SameSite"] = "Lax"
-                    }
-                }
-
                 install(io.ktor.server.plugins.contentnegotiation.ContentNegotiation) {
                     json(
                         Json {
@@ -781,10 +836,27 @@ class NotesApiIntegrationTest {
                     )
                 }
 
+                // Configure JWT authentication for testing
                 install(Authentication) {
-                    session<UserSession>("session-auth") {
-                        validate { session ->
-                            UserId(mockUserId)
+                    jwt("jwt-auth") {
+                        verifier(
+                            JWT.require(Algorithm.HMAC256("test-jwt-secret-key-for-testing-only-32bytes!!!!".toByteArray()))
+                                .build(),
+                        )
+                        validate { credentials ->
+                            val userIdString = credentials.payload.subject
+                            val userId =
+                                try {
+                                    UUID.fromString(userIdString)
+                                } catch (e: Exception) {
+                                    return@validate null
+                                }
+                            val user = userRepository.findById(userId)
+                            if (user != null) {
+                                JWTPrincipal(userId, user.email)
+                            } else {
+                                null
+                            }
                         }
                     }
                 }
@@ -809,21 +881,23 @@ class NotesApiIntegrationTest {
                     }
                 }
 
+            val accessToken = createAccessToken(testUserId)
+
             val getResponse =
                 client.get("/api/v1/notes/$noteId") {
-                    cookie("session-auth", getSessionCookie(mockUserId))
+                    header("Authorization", "Bearer $accessToken")
                 }
             assertEquals(HttpStatusCode.OK, getResponse.status)
 
             val deleteResponse =
                 client.delete("/api/v1/notes/$noteId") {
-                    cookie("session-auth", getSessionCookie(mockUserId))
+                    header("Authorization", "Bearer $accessToken")
                 }
             assertEquals(HttpStatusCode.NoContent, deleteResponse.status)
 
             val verifyResponse =
                 client.get("/api/v1/notes/$noteId") {
-                    cookie("session-auth", getSessionCookie(mockUserId))
+                    header("Authorization", "Bearer $accessToken")
                 }
             assertEquals(HttpStatusCode.NotFound, verifyResponse.status)
         }
@@ -831,19 +905,7 @@ class NotesApiIntegrationTest {
     @Test
     fun `test delete non-existent note returns 404`() =
         testApplication {
-            val mockUserId = testUserId.toString()
-
             application {
-                install(Sessions) {
-                    cookie<UserSession>("session-auth") {
-                        cookie.path = "/"
-                        cookie.maxAgeInSeconds = 86400
-                        cookie.httpOnly = true
-                        cookie.secure = false
-                        cookie.extensions["SameSite"] = "Lax"
-                    }
-                }
-
                 install(io.ktor.server.plugins.contentnegotiation.ContentNegotiation) {
                     json(
                         Json {
@@ -853,10 +915,27 @@ class NotesApiIntegrationTest {
                     )
                 }
 
+                // Configure JWT authentication for testing
                 install(Authentication) {
-                    session<UserSession>("session-auth") {
-                        validate { session ->
-                            UserId(mockUserId)
+                    jwt("jwt-auth") {
+                        verifier(
+                            JWT.require(Algorithm.HMAC256("test-jwt-secret-key-for-testing-only-32bytes!!!!".toByteArray()))
+                                .build(),
+                        )
+                        validate { credentials ->
+                            val userIdString = credentials.payload.subject
+                            val userId =
+                                try {
+                                    UUID.fromString(userIdString)
+                                } catch (e: Exception) {
+                                    return@validate null
+                                }
+                            val user = userRepository.findById(userId)
+                            if (user != null) {
+                                JWTPrincipal(userId, user.email)
+                            } else {
+                                null
+                            }
                         }
                     }
                 }
@@ -881,9 +960,11 @@ class NotesApiIntegrationTest {
                     }
                 }
 
+            val accessToken = createAccessToken(testUserId)
+
             val response =
                 client.delete("/api/v1/notes/999999") {
-                    cookie("session-auth", getSessionCookie(mockUserId))
+                    header("Authorization", "Bearer $accessToken")
                 }
             assertEquals(HttpStatusCode.NotFound, response.status)
         }
@@ -916,19 +997,7 @@ class NotesApiIntegrationTest {
                 )
             val noteId = noteRepository.create(note)
 
-            val mockUserId = testUserId.toString()
-
             application {
-                install(Sessions) {
-                    cookie<UserSession>("session-auth") {
-                        cookie.path = "/"
-                        cookie.maxAgeInSeconds = 86400
-                        cookie.httpOnly = true
-                        cookie.secure = false
-                        cookie.extensions["SameSite"] = "Lax"
-                    }
-                }
-
                 install(io.ktor.server.plugins.contentnegotiation.ContentNegotiation) {
                     json(
                         Json {
@@ -938,10 +1007,27 @@ class NotesApiIntegrationTest {
                     )
                 }
 
+                // Configure JWT authentication for testing
                 install(Authentication) {
-                    session<UserSession>("session-auth") {
-                        validate { session ->
-                            UserId(mockUserId)
+                    jwt("jwt-auth") {
+                        verifier(
+                            JWT.require(Algorithm.HMAC256("test-jwt-secret-key-for-testing-only-32bytes!!!!".toByteArray()))
+                                .build(),
+                        )
+                        validate { credentials ->
+                            val userIdString = credentials.payload.subject
+                            val userId =
+                                try {
+                                    UUID.fromString(userIdString)
+                                } catch (e: Exception) {
+                                    return@validate null
+                                }
+                            val user = userRepository.findById(userId)
+                            if (user != null) {
+                                JWTPrincipal(userId, user.email)
+                            } else {
+                                null
+                            }
                         }
                     }
                 }
@@ -966,9 +1052,11 @@ class NotesApiIntegrationTest {
                     }
                 }
 
+            val accessToken = createAccessToken(testUserId)
+
             val response =
                 client.get("/api/v1/notes/$noteId/previews") {
-                    cookie("session-auth", getSessionCookie(mockUserId))
+                    header("Authorization", "Bearer $accessToken")
                 }
             assertEquals(HttpStatusCode.OK, response.status)
 
@@ -996,19 +1084,7 @@ class NotesApiIntegrationTest {
                 )
             val noteId = noteRepository.create(note)
 
-            val mockUserId = testUserId.toString()
-
             application {
-                install(Sessions) {
-                    cookie<UserSession>("session-auth") {
-                        cookie.path = "/"
-                        cookie.maxAgeInSeconds = 86400
-                        cookie.httpOnly = true
-                        cookie.secure = false
-                        cookie.extensions["SameSite"] = "Lax"
-                    }
-                }
-
                 install(io.ktor.server.plugins.contentnegotiation.ContentNegotiation) {
                     json(
                         Json {
@@ -1018,10 +1094,27 @@ class NotesApiIntegrationTest {
                     )
                 }
 
+                // Configure JWT authentication for testing
                 install(Authentication) {
-                    session<UserSession>("session-auth") {
-                        validate { session ->
-                            UserId(mockUserId)
+                    jwt("jwt-auth") {
+                        verifier(
+                            JWT.require(Algorithm.HMAC256("test-jwt-secret-key-for-testing-only-32bytes!!!!".toByteArray()))
+                                .build(),
+                        )
+                        validate { credentials ->
+                            val userIdString = credentials.payload.subject
+                            val userId =
+                                try {
+                                    UUID.fromString(userIdString)
+                                } catch (e: Exception) {
+                                    return@validate null
+                                }
+                            val user = userRepository.findById(userId)
+                            if (user != null) {
+                                JWTPrincipal(userId, user.email)
+                            } else {
+                                null
+                            }
                         }
                     }
                 }
@@ -1046,9 +1139,11 @@ class NotesApiIntegrationTest {
                     }
                 }
 
+            val accessToken = createAccessToken(testUserId)
+
             val response =
                 client.get("/api/v1/notes/$noteId/previews") {
-                    cookie("session-auth", getSessionCookie(mockUserId))
+                    header("Authorization", "Bearer $accessToken")
                 }
             assertEquals(HttpStatusCode.OK, response.status)
 
@@ -1060,19 +1155,7 @@ class NotesApiIntegrationTest {
     @Test
     fun `test get URL previews for non-existent note returns 404`() =
         testApplication {
-            val mockUserId = testUserId.toString()
-
             application {
-                install(Sessions) {
-                    cookie<UserSession>("session-auth") {
-                        cookie.path = "/"
-                        cookie.maxAgeInSeconds = 86400
-                        cookie.httpOnly = true
-                        cookie.secure = false
-                        cookie.extensions["SameSite"] = "Lax"
-                    }
-                }
-
                 install(io.ktor.server.plugins.contentnegotiation.ContentNegotiation) {
                     json(
                         Json {
@@ -1082,10 +1165,27 @@ class NotesApiIntegrationTest {
                     )
                 }
 
+                // Configure JWT authentication for testing
                 install(Authentication) {
-                    session<UserSession>("session-auth") {
-                        validate { session ->
-                            UserId(mockUserId)
+                    jwt("jwt-auth") {
+                        verifier(
+                            JWT.require(Algorithm.HMAC256("test-jwt-secret-key-for-testing-only-32bytes!!!!".toByteArray()))
+                                .build(),
+                        )
+                        validate { credentials ->
+                            val userIdString = credentials.payload.subject
+                            val userId =
+                                try {
+                                    UUID.fromString(userIdString)
+                                } catch (e: Exception) {
+                                    return@validate null
+                                }
+                            val user = userRepository.findById(userId)
+                            if (user != null) {
+                                JWTPrincipal(userId, user.email)
+                            } else {
+                                null
+                            }
                         }
                     }
                 }
@@ -1110,9 +1210,11 @@ class NotesApiIntegrationTest {
                     }
                 }
 
+            val accessToken = createAccessToken(testUserId)
+
             val response =
                 client.get("/api/v1/notes/999999/previews") {
-                    cookie("session-auth", getSessionCookie(mockUserId))
+                    header("Authorization", "Bearer $accessToken")
                 }
             assertEquals(HttpStatusCode.NotFound, response.status)
         }
@@ -1133,19 +1235,7 @@ class NotesApiIntegrationTest {
                 )
             val noteId = noteRepository.create(note)
 
-            val mockUserId = testUserId.toString()
-
             application {
-                install(Sessions) {
-                    cookie<UserSession>("session-auth") {
-                        cookie.path = "/"
-                        cookie.maxAgeInSeconds = 86400
-                        cookie.httpOnly = true
-                        cookie.secure = false
-                        cookie.extensions["SameSite"] = "Lax"
-                    }
-                }
-
                 install(io.ktor.server.plugins.contentnegotiation.ContentNegotiation) {
                     json(
                         Json {
@@ -1155,10 +1245,27 @@ class NotesApiIntegrationTest {
                     )
                 }
 
+                // Configure JWT authentication for testing
                 install(Authentication) {
-                    session<UserSession>("session-auth") {
-                        validate { session ->
-                            UserId(mockUserId)
+                    jwt("jwt-auth") {
+                        verifier(
+                            JWT.require(Algorithm.HMAC256("test-jwt-secret-key-for-testing-only-32bytes!!!!".toByteArray()))
+                                .build(),
+                        )
+                        validate { credentials ->
+                            val userIdString = credentials.payload.subject
+                            val userId =
+                                try {
+                                    UUID.fromString(userIdString)
+                                } catch (e: Exception) {
+                                    return@validate null
+                                }
+                            val user = userRepository.findById(userId)
+                            if (user != null) {
+                                JWTPrincipal(userId, user.email)
+                            } else {
+                                null
+                            }
                         }
                     }
                 }
@@ -1183,9 +1290,11 @@ class NotesApiIntegrationTest {
                     }
                 }
 
+            val accessToken = createAccessToken(testUserId)
+
             val response =
                 client.get("/api/v1/notes/$noteId/previews") {
-                    cookie("session-auth", getSessionCookie(mockUserId))
+                    header("Authorization", "Bearer $accessToken")
                 }
             assertEquals(HttpStatusCode.OK, response.status)
 
@@ -1197,19 +1306,7 @@ class NotesApiIntegrationTest {
     @Test
     fun `test create note with markdown links extracts URLs`() =
         testApplication {
-            val mockUserId = testUserId.toString()
-
             application {
-                install(Sessions) {
-                    cookie<UserSession>("session-auth") {
-                        cookie.path = "/"
-                        cookie.maxAgeInSeconds = 86400
-                        cookie.httpOnly = true
-                        cookie.secure = false
-                        cookie.extensions["SameSite"] = "Lax"
-                    }
-                }
-
                 install(io.ktor.server.plugins.contentnegotiation.ContentNegotiation) {
                     json(
                         Json {
@@ -1219,10 +1316,27 @@ class NotesApiIntegrationTest {
                     )
                 }
 
+                // Configure JWT authentication for testing
                 install(Authentication) {
-                    session<UserSession>("session-auth") {
-                        validate { session ->
-                            UserId(mockUserId)
+                    jwt("jwt-auth") {
+                        verifier(
+                            JWT.require(Algorithm.HMAC256("test-jwt-secret-key-for-testing-only-32bytes!!!!".toByteArray()))
+                                .build(),
+                        )
+                        validate { credentials ->
+                            val userIdString = credentials.payload.subject
+                            val userId =
+                                try {
+                                    UUID.fromString(userIdString)
+                                } catch (e: Exception) {
+                                    return@validate null
+                                }
+                            val user = userRepository.findById(userId)
+                            if (user != null) {
+                                JWTPrincipal(userId, user.email)
+                            } else {
+                                null
+                            }
                         }
                     }
                 }
@@ -1247,10 +1361,12 @@ class NotesApiIntegrationTest {
                     }
                 }
 
+            val accessToken = createAccessToken(testUserId)
+
             val response =
                 client.post("/api/v1/notes") {
                     contentType(ContentType.Application.Json)
-                    cookie("session-auth", getSessionCookie(mockUserId))
+                    header("Authorization", "Bearer $accessToken")
                     setBody(
                         NoteCreationRequest(
                             title = "Note with Markdown",
@@ -1265,19 +1381,7 @@ class NotesApiIntegrationTest {
     @Test
     fun `test create note with empty title uses null`() =
         testApplication {
-            val mockUserId = testUserId.toString()
-
             application {
-                install(Sessions) {
-                    cookie<UserSession>("session-auth") {
-                        cookie.path = "/"
-                        cookie.maxAgeInSeconds = 86400
-                        cookie.httpOnly = true
-                        cookie.secure = false
-                        cookie.extensions["SameSite"] = "Lax"
-                    }
-                }
-
                 install(io.ktor.server.plugins.contentnegotiation.ContentNegotiation) {
                     json(
                         Json {
@@ -1287,10 +1391,27 @@ class NotesApiIntegrationTest {
                     )
                 }
 
+                // Configure JWT authentication for testing
                 install(Authentication) {
-                    session<UserSession>("session-auth") {
-                        validate { session ->
-                            UserId(mockUserId)
+                    jwt("jwt-auth") {
+                        verifier(
+                            JWT.require(Algorithm.HMAC256("test-jwt-secret-key-for-testing-only-32bytes!!!!".toByteArray()))
+                                .build(),
+                        )
+                        validate { credentials ->
+                            val userIdString = credentials.payload.subject
+                            val userId =
+                                try {
+                                    UUID.fromString(userIdString)
+                                } catch (e: Exception) {
+                                    return@validate null
+                                }
+                            val user = userRepository.findById(userId)
+                            if (user != null) {
+                                JWTPrincipal(userId, user.email)
+                            } else {
+                                null
+                            }
                         }
                     }
                 }
@@ -1315,10 +1436,12 @@ class NotesApiIntegrationTest {
                     }
                 }
 
+            val accessToken = createAccessToken(testUserId)
+
             val response =
                 client.post("/api/v1/notes") {
                     contentType(ContentType.Application.Json)
-                    cookie("session-auth", getSessionCookie(mockUserId))
+                    header("Authorization", "Bearer $accessToken")
                     setBody(
                         NoteCreationRequest(
                             title = "   ",
@@ -1335,7 +1458,7 @@ class NotesApiIntegrationTest {
 
             val getResponse =
                 client.get("/api/v1/notes/$noteId") {
-                    cookie("session-auth", getSessionCookie(mockUserId))
+                    header("Authorization", "Bearer $accessToken")
                 }
             val note = jsonSerializer.decodeFromString<Note>(getResponse.bodyAsText())
             assertEquals(null, note.title)
@@ -1344,19 +1467,7 @@ class NotesApiIntegrationTest {
     @Test
     fun `test create note with required content only`() =
         testApplication {
-            val mockUserId = testUserId.toString()
-
             application {
-                install(Sessions) {
-                    cookie<UserSession>("session-auth") {
-                        cookie.path = "/"
-                        cookie.maxAgeInSeconds = 86400
-                        cookie.httpOnly = true
-                        cookie.secure = false
-                        cookie.extensions["SameSite"] = "Lax"
-                    }
-                }
-
                 install(io.ktor.server.plugins.contentnegotiation.ContentNegotiation) {
                     json(
                         Json {
@@ -1366,10 +1477,27 @@ class NotesApiIntegrationTest {
                     )
                 }
 
+                // Configure JWT authentication for testing
                 install(Authentication) {
-                    session<UserSession>("session-auth") {
-                        validate { session ->
-                            UserId(mockUserId)
+                    jwt("jwt-auth") {
+                        verifier(
+                            JWT.require(Algorithm.HMAC256("test-jwt-secret-key-for-testing-only-32bytes!!!!".toByteArray()))
+                                .build(),
+                        )
+                        validate { credentials ->
+                            val userIdString = credentials.payload.subject
+                            val userId =
+                                try {
+                                    UUID.fromString(userIdString)
+                                } catch (e: Exception) {
+                                    return@validate null
+                                }
+                            val user = userRepository.findById(userId)
+                            if (user != null) {
+                                JWTPrincipal(userId, user.email)
+                            } else {
+                                null
+                            }
                         }
                     }
                 }
@@ -1394,10 +1522,12 @@ class NotesApiIntegrationTest {
                     }
                 }
 
+            val accessToken = createAccessToken(testUserId)
+
             val response =
                 client.post("/api/v1/notes") {
                     contentType(ContentType.Application.Json)
-                    cookie("session-auth", getSessionCookie(mockUserId))
+                    header("Authorization", "Bearer $accessToken")
                     setBody(
                         NoteCreationRequest(
                             title = null,

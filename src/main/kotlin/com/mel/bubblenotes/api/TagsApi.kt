@@ -1,5 +1,5 @@
 package com.mel.bubblenotes.api
-import com.mel.bubblenotes.UserId
+import com.mel.bubblenotes.JWTPrincipal
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
@@ -13,13 +13,13 @@ import java.util.UUID
  */
 fun Route.tagsApi() {
     // All tag routes require authentication
-    authenticate("session-auth") {
+    authenticate("jwt-auth") {
         // List all unique tags for the current user (from notes.tags JSON column)
         // Uses efficient SQL with jsonb_array_elements_text - O(unique tags) not O(notes)
         get("/api/v1/tags") {
             val userId =
                 UUID.fromString(
-                    call.principal<UserId>()?.id ?: return@get call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Not authenticated")),
+                    call.principal<JWTPrincipal>()?.userId?.toString() ?: return@get call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Not authenticated")),
                 )
             val repo = noteRepository ?: return@get call.respond(HttpStatusCode.ServiceUnavailable, mapOf("error" to "Note repository not configured"))
 

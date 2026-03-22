@@ -23,6 +23,9 @@ class NoteRepositoryTest {
                 jdbcUrl = "jdbc:h2:mem:test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL"
                 username = "sa"
                 password = ""
+                // Increase pool size to handle concurrent test operations
+                maximumPoolSize = 10
+                minimumIdle = 2
             }
         dataSource = HikariDataSource(hikariConfig)
 
@@ -44,7 +47,7 @@ class NoteRepositoryTest {
             throw e
         }
 
-        noteRepository = NoteRepository(dataSource.connection)
+        noteRepository = NoteRepository(dataSource)
     }
 
     fun teardown() {

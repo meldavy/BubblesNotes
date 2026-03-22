@@ -1,5 +1,6 @@
 package com.mel.bubblenotes.api
 
+import com.mel.bubblenotes.JWTPrincipal
 import com.mel.bubblenotes.UserId
 import com.mel.bubblenotes.UserSession
 import com.mel.bubblenotes.getInjector
@@ -52,8 +53,8 @@ private val jsonSerializer =
     }
 
 fun Route.notesApi() {
-    // Protected routes - require authentication via session cookie
-    authenticate("session-auth") {
+    // Protected routes - require authentication via JWT token
+    authenticate("jwt-auth") {
         route("/api/v1/notes") {
             // Create a new note
             post {
@@ -67,7 +68,7 @@ fun Route.notesApi() {
                 // Get userId from authenticated principal
                 val userId =
                     UUID.fromString(
-                        call.principal<UserId>()?.id ?: return@post call.respond(
+                        call.principal<JWTPrincipal>()?.userId.toString() ?: return@post call.respond(
                             HttpStatusCode.Unauthorized,
                             mapOf("error" to "Not authenticated"),
                         ),
@@ -187,7 +188,7 @@ fun Route.notesApi() {
                 // Get userId from authenticated principal
                 val userId =
                     UUID.fromString(
-                        call.principal<UserId>()?.id ?: return@get call.respond(
+                        call.principal<JWTPrincipal>()?.userId.toString() ?: return@get call.respond(
                             HttpStatusCode.Unauthorized,
                             mapOf("error" to "Not authenticated"),
                         ),
@@ -275,7 +276,7 @@ fun Route.notesApi() {
                     )
                 val userId =
                     UUID.fromString(
-                        call.principal<UserId>()?.id ?: return@put call.respond(
+                        call.principal<JWTPrincipal>()?.userId.toString() ?: return@put call.respond(
                             HttpStatusCode.Unauthorized,
                             mapOf("error" to "Not authenticated"),
                         ),
@@ -371,7 +372,7 @@ fun Route.notesApi() {
                         )
                     val userId =
                         UUID.fromString(
-                            call.principal<UserId>()?.id ?: return@delete call.respond(
+                            call.principal<JWTPrincipal>()?.userId.toString() ?: return@delete call.respond(
                                 HttpStatusCode.Unauthorized,
                                 mapOf("error" to "Not authenticated"),
                             ),

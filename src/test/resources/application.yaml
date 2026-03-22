@@ -37,3 +37,9 @@ ai:
     model-id: "qwen3.5:35b-a3b"
     summary-threshold: 500
     request-timeout: 10000
+
+# JWT configuration for testing
+jwt:
+  secret-key: "default-test-jwt-secret-key-for-testing-only-32bytes!!!!"
+  access-token-ttl: 900
+  refresh-token-ttl: 604800

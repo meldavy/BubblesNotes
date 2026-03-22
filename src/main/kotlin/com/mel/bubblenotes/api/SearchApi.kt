@@ -1,6 +1,5 @@
 package com.mel.bubblenotes.api
 
-import com.mel.bubblenotes.UserId
 import com.mel.bubblenotes.getInjector
 import com.mel.bubblenotes.models.Note
 import com.mel.bubblenotes.repositories.UserRepository
@@ -21,7 +20,7 @@ import java.util.UUID
  * - Tag names
  */
 fun Route.searchApi() {
-    authenticate("session-auth") {
+    authenticate("jwt-auth") {
         route("/api/v1/search") {
             // Search notes by query string
             post {
@@ -35,7 +34,7 @@ fun Route.searchApi() {
                 // Get userId from authenticated principal
                 val userId =
                     UUID.fromString(
-                        call.principal<UserId>()?.id ?: return@post call.respond(
+                        call.principal<com.mel.bubblenotes.JWTPrincipal>()?.userId?.toString() ?: return@post call.respond(
                             HttpStatusCode.Unauthorized,
                             mapOf("error" to "Not authenticated"),
                         ),

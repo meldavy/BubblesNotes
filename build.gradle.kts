@@ -131,6 +131,8 @@ dependencies {
     // Google OAuth client
     implementation("com.google.api-client:google-api-client:2.6.0")
     implementation("com.google.oauth-client:google-oauth-client-jetty:1.35.0")
+    // Auth0 java-jwt for robust JWT handling (TASK-008)
+    implementation("com.auth0:java-jwt:4.5.1")
     testImplementation("io.ktor:ktor-server-test-host:$ktor_version")
     testImplementation("io.ktor:ktor-client-mock:$ktor_version")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")

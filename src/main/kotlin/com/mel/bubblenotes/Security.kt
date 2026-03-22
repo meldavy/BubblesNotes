@@ -1,20 +1,25 @@
 package com.mel.bubblenotes
 
+import com.auth0.jwt.JWT
+import com.auth0.jwt.algorithms.Algorithm
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier
 import com.google.api.client.googleapis.auth.oauth2.GoogleRefreshTokenRequest
 import com.google.api.client.http.javanet.NetHttpTransport
 import com.google.api.client.json.JsonFactory
 import com.google.api.client.json.gson.GsonFactory
 import com.mel.bubblenotes.models.User
+import com.mel.bubblenotes.repositories.RefreshTokenRepository
 import com.mel.bubblenotes.repositories.UserRepository
 import com.mel.bubblenotes.services.EncryptionService
+import com.mel.bubblenotes.services.JWTTokenService
 import io.ktor.http.*
+import io.ktor.http.cookies
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
+import io.ktor.server.auth.jwt.*
 import io.ktor.server.plugins.cors.routing.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import io.ktor.server.sessions.*
 import io.ktor.util.*
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
@@ -23,10 +28,93 @@ import java.security.SecureRandom
 import java.time.Instant
 import java.util.Base64
 import java.util.UUID
-import javax.crypto.Mac
-import javax.crypto.spec.SecretKeySpec
+
+// Security headers plugin - adds standard security headers to all responses
+private val SecurityHeadersPlugin =
+    createApplicationPlugin(name = "SecurityHeaders") {
+        onCall { call ->
+            // X-Content-Type-Options: Prevents MIME type sniffing (always applied)
+            call.response.headers.append("X-Content-Type-Options", "nosniff")
+
+            // X-Frame-Options: Prevents clickjacking attacks (always applied)
+            call.response.headers.append("X-Frame-Options", "DENY")
+        }
+
+        onCallRespond { call, _ ->
+            // Strict-Transport-Security: Only in production environment
+            val isProduction =
+                call.application.environment.config
+                    .propertyOrNull("ktor.deployment.environment")?.getString() == "production"
+
+            if (isProduction) {
+                call.response.headers.append(
+                    "Strict-Transport-Security",
+                    "max-age=31536000; includeSubDomains",
+                )
+            }
+        }
+    }
+
+fun Application.installSecurityHeaders() {
+    install(SecurityHeadersPlugin)
+}
 
 data class UserId(val id: String)
+
+// JWT principal for authentication
+data class JWTPrincipal(
+    val userId: UUID,
+    val email: String,
+) : Principal
+
+// JWT authentication plugin for token-based authentication
+fun Application.configureJWTAuthentication(
+    jwtTokenService: JWTTokenService,
+    userRepository: UserRepository,
+) {
+    val secretKey = getJWTSecretKey()
+
+    install(Authentication) {
+        // JWT-based authentication for API routes
+        jwt("jwt-auth") {
+            verifier(
+                JWT.require(Algorithm.HMAC256(secretKey))
+                    .build(),
+            )
+            validate { credentials ->
+                // Extract user ID from JWT subject
+                val userIdString = credentials.payload.subject
+                val userId =
+                    try {
+                        UUID.fromString(userIdString)
+                    } catch (e: Exception) {
+                        return@validate null
+                    }
+
+                // Look up user in database
+                val user = userRepository.findById(userId)
+                if (user != null) {
+                    JWTPrincipal(userId, user.email)
+                } else {
+                    null
+                }
+            }
+        }
+    }
+}
+
+// Helper function to get JWT secret key from configuration
+fun Application.getJWTSecretKey(): ByteArray {
+    val config = environment.config
+    return try {
+        config.property("jwt.secret-key").getString().toByteArray()
+    } catch (e: Exception) {
+        environment.log.warn(
+            "JWT secret key not configured, using default test value. DO NOT use in production!",
+        )
+        "default-test-jwt-secret-key-for-testing-only-32bytes!!!!".toByteArray()
+    }
+}
 
 // User lookup service interface for OAuth user management
 interface UserLookupService {
@@ -63,6 +151,9 @@ fun Application.configureSecurity(
     userLookupService: UserLookupService? = null,
     encryptionService: EncryptionService? = null,
 ) {
+    // Install security headers middleware (TASK-013)
+    installSecurityHeaders()
+
     // Retrieve userRepository from Guice DI if available
     val userRepository =
         try {
@@ -71,6 +162,25 @@ fun Application.configureSecurity(
             environment.log.warn("UserRepository not available in DI container, user persistence disabled")
             null
         }
+
+    // Retrieve refreshTokenRepository from Guice DI if available
+    val refreshTokenRepository =
+        try {
+            getInjector().getInstance(RefreshTokenRepository::class.java)
+        } catch (e: Exception) {
+            environment.log.warn("RefreshTokenRepository not available in DI container, JWT authentication disabled")
+            null
+        }
+
+    // Retrieve JWTTokenService from Guice DI if available
+    val jwtTokenService =
+        try {
+            getInjector().getInstance(JWTTokenService::class.java)
+        } catch (e: Exception) {
+            environment.log.warn("JWTTokenService not available in DI container, JWT authentication disabled")
+            null
+        }
+
     val config = environment.config
 
     // Read Google OAuth configuration from application.yaml with fallback defaults
@@ -112,66 +222,35 @@ fun Application.configureSecurity(
             scopes = googleScopes,
         )
 
-    // Get encryption key for JWT signing with fallback
-    val jwtSecretKey =
+    // Get encryption key for JWT signing - uses fallback defaults if not configured
+    val jwtSecretKey: ByteArray =
         try {
-            config.property("encryption.session-key").getString().toByteArray()
+            val key = config.property("jwt.secret-key").getString()
+            if (key.isBlank()) {
+                environment.log.warn(
+                    "JWT secret key is empty or not configured, using default test value. DO NOT use in production!",
+                )
+                // Fallback default for testing/development - MUST be at least 32 bytes
+                "default-test-jwt-secret-key-for-testing-only-32bytes!!!!".toByteArray()
+            } else {
+                key.toByteArray()
+            }
         } catch (e: Exception) {
-            environment.log.warn("Session encryption key not configured, using default")
-            // 32-byte key for AES-256 encryption
-            "dev-session-key-32bytes-for-aes256!!".toByteArray()
-        }
-
-    // Install Sessions plugin for cookie-based session management
-    install(Sessions) {
-        cookie<UserSession>("session-auth") {
-            cookie.path = "/" // Essential: Make cookie available to entire app
-            cookie.maxAgeInSeconds = 86400 // 24 hours
-            cookie.httpOnly = true
-            cookie.secure = false // Set to true in production with HTTPS
-            // Essential for OAuth redirects: Lax allows cookie after redirect from Google
-            cookie.extensions["SameSite"] = "Lax"
-
-            // Use encryption for session data to protect sensitive information
-            // SessionTransportTransformerEncrypt requires:
-            // - encryptKey: 16, 24, or 32 bytes for AES-128/192/256
-            // - signKey: 32 bytes for HmacSHA256
-            val sessionKey =
-                try {
-                    config.property("encryption.session-key").getString()
-                } catch (e: Exception) {
-                    "test-session-key-for-testing-only-48bytes!!!!!!!"
-                }
-
-            // Convert the session key to bytes
-            val fullKeyBytes = sessionKey.toByteArray()
-
-            // Derive encrypt key (first 16 bytes) for AES-128 (most compatible)
-            val encryptKeyBytes =
-                if (fullKeyBytes.size >= 16) {
-                    fullKeyBytes.copyOf(16)
-                } else {
-                    // Pad with zeros if key is too short
-                    (fullKeyBytes + ByteArray(16 - fullKeyBytes.size) { 0x00 }).copyOf(16)
-                }
-
-            // Derive sign key (next 32 bytes) for HmacSHA256
-            val signKeyBytes =
-                if (fullKeyBytes.size >= 48) {
-                    fullKeyBytes.copyOfRange(16, 48)
-                } else {
-                    // Pad with zeros if key is too short
-                    val padded = fullKeyBytes + ByteArray(48 - fullKeyBytes.size) { 0x00 }
-                    padded.copyOfRange(16, 48)
-                }
-
-            transform(
-                SessionTransportTransformerEncrypt(
-                    encryptKeyBytes,
-                    signKeyBytes,
-                ),
+            environment.log.warn(
+                "JWT secret key not configured, using default test value. DO NOT use in production!",
             )
+            // Fallback default for testing/development - MUST be at least 32 bytes
+            "default-test-jwt-secret-key-for-testing-only-32bytes!!!!".toByteArray()
         }
+
+    // Configure JWT authentication if all dependencies are available
+    if (userRepository != null && refreshTokenRepository != null && jwtTokenService != null) {
+        configureJWTAuthentication(jwtTokenService, userRepository)
+        environment.log.info("JWT authentication configured successfully")
+    } else {
+        environment.log.warn(
+            "JWT authentication not configured - missing dependencies (userRepository: ${userRepository != null}, refreshTokenRepository: ${refreshTokenRepository != null}, jwtTokenService: ${jwtTokenService != null})",
+        )
     }
 
     // Install CORS plugin for cross-origin requests
@@ -227,31 +306,6 @@ fun Application.configureSecurity(
 
         // Be explicit that non-simple content types are permitted (helps with preflight)
         allowNonSimpleContentTypes = true
-    }
-
-    install(Authentication) {
-        // Session-based authentication for session management
-        session<UserSession>("session-auth") {
-            validate { session ->
-                // Session validation - check if expired
-                if (session.expiresAt < System.currentTimeMillis()) {
-                    null // Session expired
-                } else {
-                    UserId(session.userId) // Valid session
-                }
-            }
-        }
-
-        // Basic authentication for API access (fallback)
-        basic("api-auth") {
-            validate { credentials ->
-                if (credentials.name == "admin" && credentials.password == "secret") {
-                    UserId(credentials.name)
-                } else {
-                    null
-                }
-            }
-        }
     }
 
     routing {
@@ -342,10 +396,10 @@ fun Application.configureSecurity(
             }
 
             try {
-                // Exchange authorization code for ID token
-                val idToken = exchangeCodeForIdToken(code, googleConfig)
+                // Exchange authorization code for ID token and refresh token
+                val tokenResponse = exchangeCodeForIdToken(code, googleConfig)
 
-                if (idToken == null) {
+                if (tokenResponse == null) {
                     call.application.log.error("OAuth callback - Failed to exchange code for token")
                     call.respond(
                         HttpStatusCode.Unauthorized,
@@ -355,6 +409,7 @@ fun Application.configureSecurity(
                     )
                     return@get
                 }
+                val idToken = tokenResponse.idToken
                 call.application.log.info("OAuth callback - Got ID token: ${idToken.take(50)}...")
 
                 // Verify the ID token
@@ -473,31 +528,54 @@ fun Application.configureSecurity(
 
                 call.application.log.info("OAuth callback - Using user for session: ${finalUser.id}")
 
-                // Create session and store it using Ktor Sessions with the verified user
-                val sessionData =
-                    UserSession(
-                        // Convert UUID to String
-                        userId = finalUser.id.toString(),
-                        email = finalUser.email,
-                        oauthToken = idToken,
-                        // 24 hours
-                        expiresAt = System.currentTimeMillis() + 86400000,
+                // Generate JWT token pair for the user
+                val tokenPair =
+                    if (jwtTokenService != null && refreshTokenRepository != null) {
+                        jwtTokenService.createTokenPair(finalUser.id)
+                    } else {
+                        environment.log.error("JWT token service not available - cannot issue tokens")
+                        call.respond(
+                            HttpStatusCode.InternalServerError,
+                            mapOf(
+                                "error" to "Authentication failed",
+                                "message" to "JWT service not configured",
+                            ),
+                        )
+                        return@get
+                    }
+
+                call.application.log.info(
+                    "OAuth callback - JWT tokens generated for user: ${finalUser.id}, redirecting to dashboard",
+                )
+
+                // Store refresh token in HttpOnly, Secure cookie
+                val isProduction = config.propertyOrNull("ktor.deployment.environment")?.getString() == "production"
+                val cookie =
+                    Cookie(
+                        name = "refresh_token",
+                        value = tokenPair.refreshToken,
+                        path = "/",
+                        httpOnly = true,
+                        secure = isProduction,
+                        maxAge = (tokenPair.refreshTokenExpiresAt / 1000).toInt(),
+                        extensions = mapOf("SameSite" to "Lax"),
                     )
+                call.response.cookies.append(cookie)
+                call.application.log.info("OAuth callback - Refresh token stored securely")
 
                 call.application.log.info(
-                    "OAuth callback - Creating session data: userId=${sessionData.userId}, email=${sessionData.email}, expiresAt=${sessionData.expiresAt}",
+                    "OAuth callback - JWT tokens set successfully for user: ${finalUser.id}, redirecting to dashboard",
                 )
-                call.application.log.debug("OAuth callback - Session oauthToken length: ${sessionData.oauthToken.length} characters")
-
-                // Set session using Ktor Sessions API
-                call.sessions.set(sessionData)
-
-                call.application.log.info(
-                    "OAuth callback - Session set successfully for user: ${sessionData.userId}, redirecting to dashboard",
-                )
-                // Redirect to dashboard or original URL
+                // Redirect to dashboard or original URL, including access token in URL fragment for frontend
                 val redirectUrl = call.request.queryParameters["redirect"] ?: "/dashboard"
-                call.respondRedirect(redirectUrl)
+                // Append access token as URL fragment (not sent to server, only accessible via JavaScript)
+                val finalRedirectUrl =
+                    if (redirectUrl.contains("#")) {
+                        "$redirectUrl&accessToken=${tokenPair.accessToken}#authenticated"
+                    } else {
+                        "$redirectUrl#accessToken=${tokenPair.accessToken}"
+                    }
+                call.respondRedirect(finalRedirectUrl)
             } catch (e: Exception) {
                 call.application.log.error("OAuth callback error", e)
                 call.respond(
@@ -512,8 +590,22 @@ fun Application.configureSecurity(
 
         // Logout endpoint - accessible without authentication (allows clearing session)
         post("/auth/logout") {
-            // Clear session using Ktor Sessions API
-            call.sessions.clear<UserSession>()
+            // Revoke refresh token if available
+            val refreshToken = call.request.cookies["refresh_token"]
+            if (!refreshToken.isNullOrBlank() && jwtTokenService != null) {
+                jwtTokenService.revokeRefreshToken(refreshToken)
+                call.application.log.info("Logout - Refresh token revoked")
+            }
+
+            // Clear refresh token cookie
+            call.response.cookies.append(
+                Cookie(
+                    name = "refresh_token",
+                    value = "",
+                    path = "/",
+                    maxAge = 0,
+                ),
+            )
 
             call.respond(
                 HttpStatusCode.OK,
@@ -524,53 +616,62 @@ fun Application.configureSecurity(
         }
 
         // Get current user info (for frontend) - returns auth status without requiring authentication
-        authenticate("session-auth", optional = true) {
-            get("/api/v1/auth/me") {
-                // DEBUG: Log when this endpoint is called
-                call.application.log.info("=== /api/v1/auth/me endpoint called ===")
+        get("/api/v1/auth/me") {
+            val authHeader = call.request.headers["Authorization"]
+            val accessToken = authHeader?.removePrefix("Bearer ")
 
-                val userId = call.principal<UserId>()?.id
-                call.application.log.info("UserId from principal: $userId")
-
-                // DEBUG: Log cookie headers received
-                val allCookies = call.request.headers["Cookie"]
-
-                if (userId == null) {
-                    call.application.log.warn("UserId is null - returning 401")
-                    // Return 401 with authenticated: false in the body
-                    call.respond(
-                        HttpStatusCode.Unauthorized,
-                        mapOf(
-                            "authenticated" to false,
-                            "error" to "Not authenticated",
-                        ),
-                    )
-                    return@get
-                }
-
-                // Get session data to include email in response
-                val session = call.sessions.get<UserSession>()
-
-                // Return user info without sensitive data (no oauthToken)
+            if (accessToken.isNullOrBlank() || jwtTokenService == null) {
                 call.respond(
-                    HttpStatusCode.OK,
+                    HttpStatusCode.Unauthorized,
                     mapOf(
-                        "authenticated" to true,
-                        "userId" to userId,
-                        "email" to (session?.email ?: ""),
-                        // Not stored in session - would need database lookup
-                        "name" to "",
-                        // Not stored in session - would need database lookup
-                        "pictureUrl" to "",
+                        "authenticated" to false,
+                        "error" to "Not authenticated",
                     ),
                 )
-                call.application.log.info("=== /api/v1/auth/me endpoint completed ===")
+                return@get
             }
+
+            val validation = jwtTokenService.validateAccessToken(accessToken)
+            if (!validation.isValid || validation.userId == null) {
+                call.respond(
+                    HttpStatusCode.Unauthorized,
+                    mapOf(
+                        "authenticated" to false,
+                        "error" to "Invalid or expired token",
+                    ),
+                )
+                return@get
+            }
+
+            // Look up user in database
+            val user = userRepository?.findById(validation.userId)
+            if (user == null) {
+                call.respond(
+                    HttpStatusCode.Unauthorized,
+                    mapOf(
+                        "authenticated" to false,
+                        "error" to "User not found",
+                    ),
+                )
+                return@get
+            }
+
+            @Suppress("UNCHECKED_CAST")
+            call.respond(
+                HttpStatusCode.OK,
+                mapOf<String, Any>(
+                    "authenticated" to true,
+                    "userId" to user.id.toString(),
+                    "email" to user.email,
+                    "name" to (user.name ?: ""),
+                    "pictureUrl" to (user.pictureUrl ?: ""),
+                ) as Map<String, Any>,
+            )
         }
 
-        // Token refresh endpoint - exchanges refresh token for new access token
+        // Token refresh endpoint - exchanges refresh token for new access token with rotation
         post("/auth/refresh") {
-            val refreshToken = call.request.cookies["google_refresh_token"]
+            val refreshToken = call.request.cookies["refresh_token"]
 
             if (refreshToken.isNullOrBlank()) {
                 call.respond(
@@ -583,10 +684,23 @@ fun Application.configureSecurity(
                 return@post
             }
 
-            try {
-                val newAccessToken = exchangeRefreshTokenForAccessToken(refreshToken, googleConfig)
+            if (jwtTokenService == null) {
+                call.respond(
+                    HttpStatusCode.InternalServerError,
+                    mapOf(
+                        "error" to "Token refresh failed",
+                        "message" to "JWT service not configured",
+                    ),
+                )
+                return@post
+            }
 
-                if (newAccessToken == null) {
+            try {
+                // Rotate refresh token and get new token pair
+                val newTokenPair = jwtTokenService.rotateRefreshToken(refreshToken)
+
+                if (newTokenPair == null) {
+                    // Token rotation failed - token may be expired, revoked, or stolen
                     call.respond(
                         HttpStatusCode.Unauthorized,
                         mapOf(
@@ -597,24 +711,28 @@ fun Application.configureSecurity(
                     return@post
                 }
 
-                // Update session with new access token
-                val userId = call.principal<UserId>()?.id
-                if (userId != null) {
-                    call.respond(
-                        HttpStatusCode.OK,
-                        mapOf(
-                            "success" to true,
-                            "message" to "Token refreshed successfully",
-                        ),
+                // Set new refresh token in cookie
+                val isProduction = config.propertyOrNull("ktor.deployment.environment")?.getString() == "production"
+                val cookie =
+                    Cookie(
+                        name = "refresh_token",
+                        value = newTokenPair.refreshToken,
+                        path = "/",
+                        httpOnly = true,
+                        secure = isProduction,
+                        maxAge = (newTokenPair.refreshTokenExpiresAt / 1000).toInt(),
+                        extensions = mapOf("SameSite" to "Lax"),
                     )
-                } else {
-                    call.respond(
-                        HttpStatusCode.Unauthorized,
-                        mapOf(
-                            "error" to "Not authenticated",
-                        ),
-                    )
-                }
+                call.response.cookies.append(cookie)
+
+                call.respond(
+                    HttpStatusCode.OK,
+                    mapOf(
+                        "success" to true,
+                        "accessToken" to newTokenPair.accessToken,
+                        "accessTokenExpiresAt" to newTokenPair.accessTokenExpiresAt,
+                    ),
+                )
             } catch (e: Exception) {
                 call.application.log.error("Token refresh error", e)
                 call.respond(
@@ -637,104 +755,43 @@ private fun generateState(): String {
     return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
 }
 
-// Helper function to create a signed JWT for OAuth state
-private fun createOauthStateJwt(
+// Helper function to create a signed JWT for OAuth state using Auth0 java-jwt library
+internal fun createOauthStateJwt(
     state: String,
     secretKey: ByteArray,
 ): String {
     val now = Instant.now()
 
-    // Build JWT payload
-    val payload =
-        buildString {
-            append("{\"state\":\"$state\"")
-            append(",\"iat\":${now.epochSecond}")
-            append(",\"exp\":${now.plusSeconds(300).epochSecond}}") // 5 minute expiry
-        }
+    // Use Auth0 java-jwt library for robust token creation
+    val algorithm = Algorithm.HMAC256(secretKey)
 
-    // Build JWT header
-    val header =
-        Base64.getUrlEncoder().withoutPadding().encodeToString(
-            "{\"alg\":\"HS256\",\"typ\":\"JWT\"}".toByteArray(),
-        )
-
-    // Encode payload (no padding for URL safety)
-    val encodedPayload = Base64.getUrlEncoder().withoutPadding().encodeToString(payload.toByteArray())
-
-    // Create signature
-    val message = "$header.$encodedPayload"
-    val mac = Mac.getInstance("HmacSHA256")
-    mac.init(SecretKeySpec(secretKey, "HmacSHA256"))
-    val signature = Base64.getUrlEncoder().withoutPadding().encodeToString(mac.doFinal(message.toByteArray()))
-
-    return "$header.$encodedPayload.$signature"
+    return JWT.create()
+        .withClaim("state", state)
+        .withIssuedAt(now)
+        .withExpiresAt(now.plusSeconds(300)) // 5 minute expiry
+        .sign(algorithm)
 }
 
-// Helper function to validate OAuth state JWT
-private fun validateOauthStateJwt(
+// Helper function to validate OAuth state JWT using Auth0 java-jwt library
+internal fun validateOauthStateJwt(
     jwt: String,
     secretKey: ByteArray,
 ): String? {
-    try {
-        val parts = jwt.split(".")
-        if (parts.size != 3) {
-            println("JWT validation failed: invalid format, parts=${parts.size}")
-            return null
-        }
+    return try {
+        val algorithm = Algorithm.HMAC256(secretKey)
+        val verifier = JWT.require(algorithm).build()
+        val decodedJWT = verifier.verify(jwt)
 
-        val header = parts[0]
-        val encodedPayload = parts[1]
-        val signature = parts[2]
-
-        // Verify signature
-        val message = "$header.$encodedPayload"
-        val mac = Mac.getInstance("HmacSHA256")
-        mac.init(SecretKeySpec(secretKey, "HmacSHA256"))
-        val expectedSignature = Base64.getUrlEncoder().withoutPadding().encodeToString(mac.doFinal(message.toByteArray()))
-
-        println("JWT signature check: received='${signature.take(20)}...', expected='${expectedSignature.take(20)}...'")
-        println("Message to sign: $message")
-        println("Secret key length: ${secretKey.size}")
-
-        if (signature != expectedSignature) {
-            println("JWT validation failed: signature mismatch")
-            return null // Signature invalid
-        }
-
-        // Decode payload
-        val payloadJson = String(Base64.getUrlDecoder().decode(encodedPayload))
-        println("Decoded JWT payload: $payloadJson")
-
-        // Parse and validate
-        val state = extractJsonValue(payloadJson, "state")
-        println("Extracted state: $state")
-
-        if (state == null) {
-            println("JWT validation failed: could not extract state from payload")
-            return null
-        }
-
-        val iat = extractJsonValue(payloadJson, "iat")?.toLongOrNull()
-        val exp = extractJsonValue(payloadJson, "exp")?.toLongOrNull()
-
-        println("Token iat=$iat, exp=$exp, current=${Instant.now().epochSecond}")
-
-        // Check expiration
-        if (exp != null && Instant.now().epochSecond > exp) {
-            println("JWT validation failed: token expired")
-            return null // Token expired
-        }
-
-        println("JWT validated successfully, state=$state")
-        return state
+        // Extract the state claim
+        decodedJWT.getClaim("state")?.asString()
     } catch (e: Exception) {
-        println("JWT validation exception: ${e.message}")
-        e.printStackTrace()
-        return null
+        // JWT validation failed - signature invalid, token expired, or malformed
+        null
     }
 }
 
-// Simple JSON value extractor (avoids external dependencies)
+// Helper function to extract JSON value (no longer used but kept for backward compatibility if needed elsewhere)
+@Deprecated("Use Auth0 java-jwt library instead of manual JSON parsing")
 private fun extractJsonValue(
     json: String,
     key: String,
@@ -744,17 +801,17 @@ private fun extractJsonValue(
     return regex.find(json)?.groupValues?.get(1)
 }
 
-// Helper function to exchange authorization code for ID token
+// Helper function to exchange authorization code for ID token and refresh token
+private data class TokenResponse(
+    val idToken: String,
+    val refreshToken: String?,
+)
+
 private fun exchangeCodeForIdToken(
     code: String,
     config: GoogleOAuthConfig,
-): String? {
+): TokenResponse? {
     try {
-        println("Exchanging code for token:")
-        println("  Client ID: ${config.clientId.take(20)}...")
-        println("  Redirect URI: ${config.redirectUri}")
-        println("  Code length: ${code.length}")
-
         // Use raw HTTP connection to exchange the code
         val url = URL("https://oauth2.googleapis.com/token")
         val conn = url.openConnection() as HttpURLConnection
@@ -784,26 +841,28 @@ private fun exchangeCodeForIdToken(
                 conn.errorStream?.bufferedReader()?.readText() ?: ""
             }
 
-        println("Response code: $responseCode")
-        println("Response body: $responseBody")
-
         if (responseCode == HttpURLConnection.HTTP_OK) {
-            // Parse JSON response to extract id_token - handle multi-line JSON
+            // Parse JSON response to extract id_token and refresh_token - handle multi-line JSON
             val idTokenRegex = Regex("\"id_token\"\\s*:\\s*\"([^\"]+)\"")
             val idTokenMatch = idTokenRegex.find(responseBody)
             if (idTokenMatch != null) {
                 val idToken = idTokenMatch.groupValues[1]
-                println("Token exchange successful, got ID token: ${idToken.take(30)}...")
-                return idToken
+                // Extract refresh token if present (only returned on first authorization or when offline access requested)
+                val refreshTokenRegex = Regex("\"refresh_token\"\\s*:\\s*\"([^\"]+)\"")
+                val refreshTokenMatch = refreshTokenRegex.find(responseBody)
+                val refreshToken = refreshTokenMatch?.groupValues?.get(1)
+                return TokenResponse(idToken, refreshToken)
             } else {
-                println("Token exchange failed: could not extract id_token from response")
                 // Try alternative parsing - look for the key without escaping
                 val altRegex = Regex("""id_token":\s*"([^"]+)""")
                 val altMatch = altRegex.find(responseBody)
                 if (altMatch != null) {
                     val idToken = altMatch.groupValues[1]
-                    println("Token exchange successful (alt parse), got ID token: ${idToken.take(30)}...")
-                    return idToken
+                    // Extract refresh token if present
+                    val refreshTokenRegex = Regex("\"refresh_token\"\\s*:\\s*\"([^\"]+)\"")
+                    val refreshTokenMatch = refreshTokenRegex.find(responseBody)
+                    val refreshToken = refreshTokenMatch?.groupValues?.get(1)
+                    return TokenResponse(idToken, refreshToken)
                 }
             }
         }
@@ -811,7 +870,6 @@ private fun exchangeCodeForIdToken(
         return null
     } catch (e: Exception) {
         println("Error exchanging code for token: ${e.message}")
-        e.printStackTrace()
         return null
     }
 }

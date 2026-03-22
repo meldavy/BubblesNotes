@@ -1,60 +1,78 @@
 package com.mel.bubblenotes.repositories
 
 import com.mel.bubblenotes.models.NoteTag
+import com.zaxxer.hikari.HikariDataSource
 import java.sql.Connection
 
 /**
  * Repository for the many-to-many relationship between notes and tags.
  */
-open class NoteTagRepository(private val connection: Connection) {
+open class NoteTagRepository(private val dataSource: HikariDataSource) {
+    /**
+     * Get a fresh connection from the pool for each database operation.
+     * This prevents "Connection is closed" errors that occur when storing
+     * a single connection across multiple requests.
+     */
+    private fun getConnection(): Connection = dataSource.connection
+
     /** Add a link between a note and a tag */
     fun add(noteTag: NoteTag) {
         val sql =
             """
             INSERT INTO note_tags (note_id, tag_id, user_id) VALUES (?, ?, ?)
             """.trimIndent()
-        connection.prepareStatement(sql).use { stmt ->
-            stmt.setLong(1, noteTag.noteId)
-            stmt.setLong(2, noteTag.tagId)
-            stmt.setObject(3, noteTag.userId)
-            stmt.executeUpdate()
+        getConnection().use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.setLong(1, noteTag.noteId)
+                stmt.setLong(2, noteTag.tagId)
+                stmt.setObject(3, noteTag.userId)
+                stmt.executeUpdate()
+            }
         }
     }
 
     /** Find tag IDs associated with a given note ID */
     fun findTagIdsByNoteId(noteId: Long): List<Long> {
         val sql = "SELECT tag_id FROM note_tags WHERE note_id = ?"
-        connection.prepareStatement(sql).use { stmt ->
-            stmt.setLong(1, noteId)
-            val rs = stmt.executeQuery()
-            val ids = mutableListOf<Long>()
-            while (rs.next()) {
-                ids.add(rs.getLong("tag_id"))
+        getConnection().use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.setLong(1, noteId)
+                stmt.executeQuery().use { rs ->
+                    val ids = mutableListOf<Long>()
+                    while (rs.next()) {
+                        ids.add(rs.getLong("tag_id"))
+                    }
+                    return ids
+                }
             }
-            return ids
         }
     }
 
     /** Find note IDs associated with a given tag ID */
     fun findNoteIdsByTagId(tagId: Long): List<Long> {
         val sql = "SELECT note_id FROM note_tags WHERE tag_id = ?"
-        connection.prepareStatement(sql).use { stmt ->
-            stmt.setLong(1, tagId)
-            val rs = stmt.executeQuery()
-            val ids = mutableListOf<Long>()
-            while (rs.next()) {
-                ids.add(rs.getLong("note_id"))
+        getConnection().use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.setLong(1, tagId)
+                stmt.executeQuery().use { rs ->
+                    val ids = mutableListOf<Long>()
+                    while (rs.next()) {
+                        ids.add(rs.getLong("note_id"))
+                    }
+                    return ids
+                }
             }
-            return ids
         }
     }
 
     /** Delete all tag links for a note */
     fun deleteByNoteId(noteId: Long) {
         val sql = "DELETE FROM note_tags WHERE note_id = ?"
-        connection.prepareStatement(sql).use { stmt ->
-            stmt.setLong(1, noteId)
-            stmt.executeUpdate()
+        getConnection().use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.setLong(1, noteId)
+                stmt.executeUpdate()
+            }
         }
     }
 
@@ -64,10 +82,12 @@ open class NoteTagRepository(private val connection: Connection) {
         tagId: Long,
     ) {
         val sql = "DELETE FROM note_tags WHERE note_id = ? AND tag_id = ?"
-        connection.prepareStatement(sql).use { stmt ->
-            stmt.setLong(1, noteId)
-            stmt.setLong(2, tagId)
-            stmt.executeUpdate()
+        getConnection().use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.setLong(1, noteId)
+                stmt.setLong(2, tagId)
+                stmt.executeUpdate()
+            }
         }
     }
 }
