@@ -168,37 +168,41 @@ open class NoteRepository(private val dataSource: HikariDataSource) {
                 LIMIT ?
                 """.trimIndent()
             }
-        getConnection().prepareStatement(sql).use { stmt ->
-            var idx = 1
-            stmt.setObject(idx++, userId)
-            if (cursor != null) {
-                stmt.setLong(idx++, cursor)
-            }
-            // set noteIds parameters
-            for (id in noteIds) {
-                stmt.setLong(idx++, id)
-            }
-            stmt.setInt(idx, limit)
-            val rs = stmt.executeQuery()
-            return buildList {
-                while (rs.next()) {
-                    add(
-                        Note(
-                            id = rs.getLong("id"),
-                            userId = rs.getObject("user_id", UUID::class.java),
-                            title = rs.getString("title"),
-                            content = rs.getString("content"),
-                            isPublished = rs.getBoolean("is_published"),
-                            tags = rs.getString("tags")?.let { runCatching { json.decodeFromString<List<String>>(it) }.getOrDefault(emptyList()) } ?: emptyList(),
-                            aiTitle = rs.getString("ai_title"),
-                            aiSummary = rs.getString("ai_summary"),
-                            aiTags = rs.getString("ai_tags")?.let { runCatching { json.decodeFromString<List<String>>(it) }.getOrDefault(emptyList()) } ?: emptyList(),
-                            lastVersionId = rs.getLongOrNull("last_version_id"),
-                            previewData = rs.getString("preview_data"),
-                            createdAt = rs.getLong("created_at"),
-                            updatedAt = rs.getLong("updated_at"),
-                        ),
-                    )
+        getConnection().use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.queryTimeout = 10
+                var idx = 1
+                stmt.setObject(idx++, userId)
+                if (cursor != null) {
+                    stmt.setLong(idx++, cursor)
+                }
+                // set noteIds parameters
+                for (id in noteIds) {
+                    stmt.setLong(idx++, id)
+                }
+                stmt.setInt(idx, limit)
+                stmt.executeQuery().use { rs ->
+                    return buildList {
+                        while (rs.next()) {
+                            add(
+                                Note(
+                                    id = rs.getLong("id"),
+                                    userId = rs.getObject("user_id", UUID::class.java),
+                                    title = rs.getString("title"),
+                                    content = rs.getString("content"),
+                                    isPublished = rs.getBoolean("is_published"),
+                                    tags = rs.getString("tags")?.let { runCatching { json.decodeFromString<List<String>>(it) }.getOrDefault(emptyList()) } ?: emptyList(),
+                                    aiTitle = rs.getString("ai_title"),
+                                    aiSummary = rs.getString("ai_summary"),
+                                    aiTags = rs.getString("ai_tags")?.let { runCatching { json.decodeFromString<List<String>>(it) }.getOrDefault(emptyList()) } ?: emptyList(),
+                                    lastVersionId = rs.getLongOrNull("last_version_id"),
+                                    previewData = rs.getString("preview_data"),
+                                    createdAt = rs.getLong("created_at"),
+                                    updatedAt = rs.getLong("updated_at"),
+                                ),
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -212,17 +216,20 @@ open class NoteRepository(private val dataSource: HikariDataSource) {
             WHERE id = ? AND user_id = ?
             """.trimIndent()
 
-        getConnection().prepareStatement(sql).use { stmt ->
-            stmt.setString(1, note.title)
-            stmt.setString(2, note.content)
-            stmt.setBoolean(3, note.isPublished)
-            stmt.setString(4, json.encodeToString(note.tags))
-            stmt.setString(5, note.previewData)
-            stmt.setLong(6, note.updatedAt)
-            stmt.setLong(7, note.id)
-            stmt.setObject(8, note.userId)
+        getConnection().use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.queryTimeout = 10
+                stmt.setString(1, note.title)
+                stmt.setString(2, note.content)
+                stmt.setBoolean(3, note.isPublished)
+                stmt.setString(4, json.encodeToString(note.tags))
+                stmt.setString(5, note.previewData)
+                stmt.setLong(6, note.updatedAt)
+                stmt.setLong(7, note.id)
+                stmt.setObject(8, note.userId)
 
-            return stmt.executeUpdate() > 0
+                return stmt.executeUpdate() > 0
+            }
         }
     }
 
@@ -250,14 +257,17 @@ open class NoteRepository(private val dataSource: HikariDataSource) {
             WHERE id = ?
             """.trimIndent()
 
-        getConnection().prepareStatement(sql).use { stmt ->
-            stmt.setString(1, aiTitle)
-            stmt.setString(2, aiSummary)
-            stmt.setString(3, aiTags?.let { json.encodeToString(it) })
-            stmt.setLong(4, System.currentTimeMillis())
-            stmt.setLong(5, noteId)
+        getConnection().use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.queryTimeout = 10
+                stmt.setString(1, aiTitle)
+                stmt.setString(2, aiSummary)
+                stmt.setString(3, aiTags?.let { json.encodeToString(it) })
+                stmt.setLong(4, System.currentTimeMillis())
+                stmt.setLong(5, noteId)
 
-            return stmt.executeUpdate() > 0
+                return stmt.executeUpdate() > 0
+            }
         }
     }
 
@@ -303,36 +313,40 @@ open class NoteRepository(private val dataSource: HikariDataSource) {
                 """.trimIndent()
             }
 
-        getConnection().prepareStatement(sql).use { stmt ->
-            var idx = 1
-            stmt.setObject(idx++, userId)
-            if (cursor != null) {
-                stmt.setLong(idx++, cursor)
-            }
-            stmt.setString(idx++, pattern)
-            stmt.setInt(idx, limit)
-            val rs = stmt.executeQuery()
-            return buildList {
-                while (rs.next()) {
-                    add(
-                        Note(
-                            id = rs.getLong("id"),
-                            userId = rs.getObject("user_id", UUID::class.java),
-                            title = rs.getString("title"),
-                            content = rs.getString("content"),
-                            isPublished = rs.getBoolean("is_published"),
-                            tags =
-                                rs.getString("tags")?.let { runCatching { json.decodeFromString<List<String>>(it) }.getOrDefault(emptyList()) }
-                                    ?: emptyList(),
-                            aiTitle = rs.getString("ai_title"),
-                            aiSummary = rs.getString("ai_summary"),
-                            aiTags = rs.getString("ai_tags")?.let { runCatching { json.decodeFromString<List<String>>(it) }.getOrDefault(emptyList()) } ?: emptyList(),
-                            lastVersionId = rs.getLongOrNull("last_version_id"),
-                            previewData = rs.getString("preview_data"),
-                            createdAt = rs.getLong("created_at"),
-                            updatedAt = rs.getLong("updated_at"),
-                        ),
-                    )
+        getConnection().use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.queryTimeout = 10
+                var idx = 1
+                stmt.setObject(idx++, userId)
+                if (cursor != null) {
+                    stmt.setLong(idx++, cursor)
+                }
+                stmt.setString(idx++, pattern)
+                stmt.setInt(idx, limit)
+                stmt.executeQuery().use { rs ->
+                    return buildList {
+                        while (rs.next()) {
+                            add(
+                                Note(
+                                    id = rs.getLong("id"),
+                                    userId = rs.getObject("user_id", UUID::class.java),
+                                    title = rs.getString("title"),
+                                    content = rs.getString("content"),
+                                    isPublished = rs.getBoolean("is_published"),
+                                    tags =
+                                        rs.getString("tags")?.let { runCatching { json.decodeFromString<List<String>>(it) }.getOrDefault(emptyList()) }
+                                            ?: emptyList(),
+                                    aiTitle = rs.getString("ai_title"),
+                                    aiSummary = rs.getString("ai_summary"),
+                                    aiTags = rs.getString("ai_tags")?.let { runCatching { json.decodeFromString<List<String>>(it) }.getOrDefault(emptyList()) } ?: emptyList(),
+                                    lastVersionId = rs.getLongOrNull("last_version_id"),
+                                    previewData = rs.getString("preview_data"),
+                                    createdAt = rs.getLong("created_at"),
+                                    updatedAt = rs.getLong("updated_at"),
+                                ),
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -396,37 +410,41 @@ open class NoteRepository(private val dataSource: HikariDataSource) {
                 """.trimIndent()
             }
 
-        getConnection().prepareStatement(sql).use { stmt ->
-            var idx = 1
-            stmt.setObject(idx++, userId)
-            if (cursor != null) {
-                stmt.setLong(idx++, cursor)
-            }
-            stmt.setString(idx++, titlePattern)
-            stmt.setString(idx++, contentPattern)
-            stmt.setString(idx++, tagsPattern)
-            stmt.setInt(idx, limit)
+        getConnection().use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.queryTimeout = 10
+                var idx = 1
+                stmt.setObject(idx++, userId)
+                if (cursor != null) {
+                    stmt.setLong(idx++, cursor)
+                }
+                stmt.setString(idx++, titlePattern)
+                stmt.setString(idx++, contentPattern)
+                stmt.setString(idx++, tagsPattern)
+                stmt.setInt(idx, limit)
 
-            val rs = stmt.executeQuery()
-            return buildList {
-                while (rs.next()) {
-                    add(
-                        Note(
-                            id = rs.getLong("id"),
-                            userId = rs.getObject("user_id", UUID::class.java),
-                            title = rs.getString("title"),
-                            content = rs.getString("content"),
-                            isPublished = rs.getBoolean("is_published"),
-                            tags = rs.getString("tags")?.let { runCatching { json.decodeFromString<List<String>>(it) }.getOrDefault(emptyList()) } ?: emptyList(),
-                            aiTitle = rs.getString("ai_title"),
-                            aiSummary = rs.getString("ai_summary"),
-                            aiTags = rs.getString("ai_tags")?.let { runCatching { json.decodeFromString<List<String>>(it) }.getOrDefault(emptyList()) } ?: emptyList(),
-                            lastVersionId = rs.getLongOrNull("last_version_id"),
-                            previewData = rs.getString("preview_data"),
-                            createdAt = rs.getLong("created_at"),
-                            updatedAt = rs.getLong("updated_at"),
-                        ),
-                    )
+                stmt.executeQuery().use { rs ->
+                    return buildList {
+                        while (rs.next()) {
+                            add(
+                                Note(
+                                    id = rs.getLong("id"),
+                                    userId = rs.getObject("user_id", UUID::class.java),
+                                    title = rs.getString("title"),
+                                    content = rs.getString("content"),
+                                    isPublished = rs.getBoolean("is_published"),
+                                    tags = rs.getString("tags")?.let { runCatching { json.decodeFromString<List<String>>(it) }.getOrDefault(emptyList()) } ?: emptyList(),
+                                    aiTitle = rs.getString("ai_title"),
+                                    aiSummary = rs.getString("ai_summary"),
+                                    aiTags = rs.getString("ai_tags")?.let { runCatching { json.decodeFromString<List<String>>(it) }.getOrDefault(emptyList()) } ?: emptyList(),
+                                    lastVersionId = rs.getLongOrNull("last_version_id"),
+                                    previewData = rs.getString("preview_data"),
+                                    createdAt = rs.getLong("created_at"),
+                                    updatedAt = rs.getLong("updated_at"),
+                                ),
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -438,23 +456,30 @@ open class NoteRepository(private val dataSource: HikariDataSource) {
     ): Boolean {
         val sql = "DELETE FROM notes WHERE id = ? AND user_id = ?"
 
-        getConnection().prepareStatement(sql).use { stmt ->
-            stmt.setLong(1, id)
-            stmt.setObject(2, userId)
-            return stmt.executeUpdate() > 0
+        getConnection().use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.queryTimeout = 10
+                stmt.setLong(1, id)
+                stmt.setObject(2, userId)
+                return stmt.executeUpdate() > 0
+            }
         }
     }
 
     fun countByUserId(userId: UUID): Int {
         val sql = "SELECT COUNT(*) FROM notes WHERE user_id = ?"
 
-        getConnection().prepareStatement(sql).use { stmt ->
-            stmt.setObject(1, userId)
-            val rs = stmt.executeQuery()
-            if (rs.next()) {
-                return rs.getInt(1)
+        getConnection().use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.queryTimeout = 10
+                stmt.setObject(1, userId)
+                stmt.executeQuery().use { rs ->
+                    if (rs.next()) {
+                        return rs.getInt(1)
+                    }
+                    return 0
+                }
             }
-            return 0
         }
     }
 
@@ -487,13 +512,17 @@ open class NoteRepository(private val dataSource: HikariDataSource) {
                 ORDER BY tag_name
                 """.trimIndent()
 
-            getConnection().prepareStatement(sql).use { stmt ->
-                stmt.setObject(1, userId)
-                stmt.setObject(2, userId)
-                val rs = stmt.executeQuery()
-                buildList {
-                    while (rs.next()) {
-                        add(rs.getString("tag_name"))
+            getConnection().use { conn ->
+                conn.prepareStatement(sql).use { stmt ->
+                    stmt.queryTimeout = 10
+                    stmt.setObject(1, userId)
+                    stmt.setObject(2, userId)
+                    stmt.executeQuery().use { rs ->
+                        return buildList {
+                            while (rs.next()) {
+                                add(rs.getString("tag_name"))
+                            }
+                        }
                     }
                 }
             }
@@ -524,38 +553,41 @@ open class NoteRepository(private val dataSource: HikariDataSource) {
                 LIMIT ?
                 """.trimIndent()
 
-            getConnection().prepareStatement(sql).use { stmt ->
-                stmt.setObject(1, userId)
-                stmt.setObject(2, lastId)
-                stmt.setInt(3, batchSize)
-                val rs = stmt.executeQuery()
+            getConnection().use { conn ->
+                conn.prepareStatement(sql).use { stmt ->
+                    stmt.queryTimeout = 10
+                    stmt.setObject(1, userId)
+                    stmt.setObject(2, lastId)
+                    stmt.setInt(3, batchSize)
+                    stmt.executeQuery().use { rs ->
+                        var count = 0
+                        while (rs.next()) {
+                            count++
+                            lastId = rs.getLong("id")
 
-                var count = 0
-                while (rs.next()) {
-                    count++
-                    lastId = rs.getLong("id")
+                            // Extract user-defined tags
+                            val tagsJson = rs.getString("tags")
+                            tagsJson?.let { jsonStr ->
+                                runCatching {
+                                    json.decodeFromString<List<String>>(jsonStr)
+                                        .filter { it.isNotBlank() }
+                                        .forEach { allTags.add(it) }
+                                }
+                            }
 
-                    // Extract user-defined tags
-                    val tagsJson = rs.getString("tags")
-                    tagsJson?.let { jsonStr ->
-                        runCatching {
-                            json.decodeFromString<List<String>>(jsonStr)
-                                .filter { it.isNotBlank() }
-                                .forEach { allTags.add(it) }
+                            // Extract AI-generated tags
+                            val aiTagsJson = rs.getString("ai_tags")
+                            aiTagsJson?.let { jsonStr ->
+                                runCatching {
+                                    json.decodeFromString<List<String>>(jsonStr)
+                                        .filter { it.isNotBlank() }
+                                        .forEach { allTags.add(it) }
+                                }
+                            }
                         }
-                    }
-
-                    // Extract AI-generated tags
-                    val aiTagsJson = rs.getString("ai_tags")
-                    aiTagsJson?.let { jsonStr ->
-                        runCatching {
-                            json.decodeFromString<List<String>>(jsonStr)
-                                .filter { it.isNotBlank() }
-                                .forEach { allTags.add(it) }
-                        }
+                        hasMore = count == batchSize
                     }
                 }
-                hasMore = count == batchSize
             }
         }
 

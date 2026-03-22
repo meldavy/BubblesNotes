@@ -180,18 +180,32 @@ open class JWTTokenService(
             return null
         }
 
-        // Generate new token pair
+        // Rotate the token: mark old as used, create new with parent reference
+        // The rotate method now generates the new token internally and returns (hash, token)
         val newExpiresAt = Instant.now().plusSeconds(refreshTokenTtlSeconds)
-        val newTokenPair = createTokenPair(refreshToken.userId, refreshToken.tokenHash)
-
-        // Rotate the token (mark old as used, create new with parent reference)
-        refreshTokenRepository.rotate(
+        val (newRefreshTokenHash, newRefreshTokenString) = refreshTokenRepository.rotate(
             oldTokenHash = refreshToken.tokenHash,
-            newToken = newTokenPair.refreshToken,
             newExpiresAt = newExpiresAt.toEpochMilli(),
         )
 
-        return newTokenPair
+        // Generate new access token
+        val now = Instant.now()
+        val accessTokenExpiresAt = now.plusSeconds(accessTokenTtlSeconds)
+        val accessToken =
+            JWT.create()
+                .withSubject(refreshToken.userId.toString())
+                .withClaim("type", TOKEN_TYPE_ACCESS)
+                .withIssuedAt(now)
+                .withExpiresAt(accessTokenExpiresAt)
+                .withClaim("userId", refreshToken.userId.toString())
+                .sign(Algorithm.HMAC256(secretKey))
+
+        return TokenPair(
+            accessToken = accessToken,
+            refreshToken = newRefreshTokenString,
+            accessTokenExpiresAt = accessTokenExpiresAt.toEpochMilli(),
+            refreshTokenExpiresAt = newExpiresAt.toEpochMilli(),
+        )
     }
 
     /**

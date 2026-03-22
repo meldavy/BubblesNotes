@@ -4,6 +4,7 @@ import com.zaxxer.hikari.HikariDataSource
 import java.security.MessageDigest
 import java.sql.Connection
 import java.sql.Statement
+import java.util.Base64
 import java.util.UUID
 
 /**
@@ -70,6 +71,7 @@ open class RefreshTokenRepository(private val dataSource: HikariDataSource) {
 
         getConnection().use { conn ->
             conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS).use { stmt ->
+                stmt.queryTimeout = 10
                 stmt.setObject(1, userId)
                 stmt.setString(2, tokenHash)
                 stmt.setString(3, parentTokenHash)
@@ -102,6 +104,7 @@ open class RefreshTokenRepository(private val dataSource: HikariDataSource) {
 
         getConnection().use { conn ->
             conn.prepareStatement(sql).use { stmt ->
+                stmt.queryTimeout = 10
                 stmt.setString(1, tokenHash)
                 stmt.executeQuery().use { rs ->
                     if (rs.next()) {
@@ -140,6 +143,7 @@ open class RefreshTokenRepository(private val dataSource: HikariDataSource) {
         val currentTime = System.currentTimeMillis()
         getConnection().use { conn ->
             conn.prepareStatement(sql).use { stmt ->
+                stmt.queryTimeout = 10
                 stmt.setObject(1, userId)
                 stmt.setLong(2, currentTime)
                 stmt.executeQuery().use { rs ->
@@ -165,19 +169,30 @@ open class RefreshTokenRepository(private val dataSource: HikariDataSource) {
 
     /**
      * Rotate a refresh token: mark old token as used and create a new one.
+     * The new token is generated internally to ensure atomicity.
      * @param oldTokenHash The hash of the token being rotated
-     * @param newToken The new refresh token value
      * @param newExpiresAt Expiration timestamp for the new token
-     * @return The hash of the new token (for response)
+     * @return Pair of (new token hash, new token string)
      */
     fun rotate(
         oldTokenHash: String,
-        newToken: String,
         newExpiresAt: Long,
-    ): String {
+    ): Pair<String, String> {
+        // Generate new token string
+        val secureRandom = java.security.SecureRandom()
+        val bytes = ByteArray(32)
+        secureRandom.nextBytes(bytes)
+        val newToken = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
+        val newTokenHash = hashToken(newToken)
+
         getConnection().use { conn ->
             conn.autoCommit = false
             try {
+                // Fail fast on lock contention inside this transaction
+                conn.createStatement().use { s ->
+                    s.queryTimeout = 5
+                    s.execute("SET LOCAL lock_timeout = '5s'")
+                }
                 // Mark old token as used
                 val updateSql =
                     """
@@ -188,13 +203,13 @@ open class RefreshTokenRepository(private val dataSource: HikariDataSource) {
 
                 val currentTime = System.currentTimeMillis()
                 conn.prepareStatement(updateSql).use { stmt ->
+                    stmt.queryTimeout = 10
                     stmt.setLong(1, currentTime)
                     stmt.setString(2, oldTokenHash)
                     stmt.executeUpdate()
                 }
 
                 // Create new token with parent reference
-                val newTokenHash = hashToken(newToken)
                 val insertSql =
                     """
                     INSERT INTO refresh_tokens (user_id, token_hash, parent_token_hash, expires_at, created_at, is_current)
@@ -203,6 +218,7 @@ open class RefreshTokenRepository(private val dataSource: HikariDataSource) {
                     """.trimIndent()
 
                 conn.prepareStatement(insertSql).use { stmt ->
+                    stmt.queryTimeout = 10
                     stmt.setString(1, newTokenHash)
                     stmt.setString(2, oldTokenHash)
                     stmt.setLong(3, newExpiresAt)
@@ -212,7 +228,7 @@ open class RefreshTokenRepository(private val dataSource: HikariDataSource) {
                 }
 
                 conn.commit()
-                return newTokenHash
+                return Pair(newTokenHash, newToken)
             } catch (e: Exception) {
                 conn.rollback()
                 throw e
@@ -240,11 +256,14 @@ open class RefreshTokenRepository(private val dataSource: HikariDataSource) {
             """.trimIndent()
 
         val currentTime = System.currentTimeMillis()
-        getConnection().prepareStatement(sql).use { stmt ->
-            stmt.setLong(1, currentTime)
-            stmt.setString(2, reason)
-            stmt.setString(3, tokenHash)
-            return stmt.executeUpdate() > 0
+        getConnection().use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.queryTimeout = 10
+                stmt.setLong(1, currentTime)
+                stmt.setString(2, reason)
+                stmt.setString(3, tokenHash)
+                return stmt.executeUpdate() > 0
+            }
         }
     }
 
@@ -266,11 +285,14 @@ open class RefreshTokenRepository(private val dataSource: HikariDataSource) {
             """.trimIndent()
 
         val currentTime = System.currentTimeMillis()
-        getConnection().prepareStatement(sql).use { stmt ->
-            stmt.setLong(1, currentTime)
-            stmt.setString(2, reason)
-            stmt.setObject(3, userId)
-            return stmt.executeUpdate()
+        getConnection().use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.queryTimeout = 10
+                stmt.setLong(1, currentTime)
+                stmt.setString(2, reason)
+                stmt.setObject(3, userId)
+                return stmt.executeUpdate()
+            }
         }
     }
 
@@ -289,10 +311,14 @@ open class RefreshTokenRepository(private val dataSource: HikariDataSource) {
             WHERE rt1.token_hash = ? AND rt2.used_at IS NOT NULL AND rt1.used_at IS NULL
             """.trimIndent()
 
-        getConnection().prepareStatement(sql).use { stmt ->
-            stmt.setString(1, tokenHash)
-            val rs = stmt.executeQuery()
-            return rs.next() // If a row exists, theft was detected
+        getConnection().use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.queryTimeout = 10
+                stmt.setString(1, tokenHash)
+                stmt.executeQuery().use { rs ->
+                    return rs.next() // If a row exists, theft was detected
+                }
+            }
         }
     }
 
@@ -308,6 +334,11 @@ open class RefreshTokenRepository(private val dataSource: HikariDataSource) {
         getConnection().use { conn ->
             conn.autoCommit = false
             try {
+                // Fail fast on lock contention inside this transaction
+                conn.createStatement().use { s ->
+                    s.queryTimeout = 5
+                    s.execute("SET LOCAL lock_timeout = '5s'")
+                }
                 val currentTime = System.currentTimeMillis()
 
                 // Revoke the stolen token
@@ -319,6 +350,7 @@ open class RefreshTokenRepository(private val dataSource: HikariDataSource) {
                     """.trimIndent()
 
                 conn.prepareStatement(revokeSql).use { stmt ->
+                    stmt.queryTimeout = 10
                     stmt.setLong(1, currentTime)
                     stmt.setString(2, tokenHash)
                     stmt.executeUpdate()
@@ -333,6 +365,7 @@ open class RefreshTokenRepository(private val dataSource: HikariDataSource) {
                     """.trimIndent()
 
                 conn.prepareStatement(revokeChildrenSql).use { stmt ->
+                    stmt.queryTimeout = 10
                     stmt.setLong(1, currentTime)
                     stmt.setString(2, tokenHash)
                     stmt.executeUpdate()
@@ -347,6 +380,7 @@ open class RefreshTokenRepository(private val dataSource: HikariDataSource) {
                     """.trimIndent()
 
                 conn.prepareStatement(revokeAllSql).use { stmt ->
+                    stmt.queryTimeout = 10
                     stmt.setLong(1, currentTime)
                     stmt.setObject(2, userId)
                     stmt.executeUpdate()
@@ -378,11 +412,14 @@ open class RefreshTokenRepository(private val dataSource: HikariDataSource) {
         val currentTime = System.currentTimeMillis()
         val cutoffTime = currentTime - (olderThanDays.toLong() * 24 * 60 * 60 * 1000)
 
-        getConnection().prepareStatement(sql).use { stmt ->
-            stmt.setLong(1, cutoffTime)
-            stmt.setLong(2, olderThanDays.toLong() * 24 * 60 * 60 * 1000)
-            stmt.setLong(3, olderThanDays.toLong() * 24 * 60 * 60 * 1000)
-            return stmt.executeUpdate()
+        getConnection().use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.queryTimeout = 10
+                stmt.setLong(1, cutoffTime)
+                stmt.setLong(2, olderThanDays.toLong() * 24 * 60 * 60 * 1000)
+                stmt.setLong(3, olderThanDays.toLong() * 24 * 60 * 60 * 1000)
+                return stmt.executeUpdate()
+            }
         }
     }
 }

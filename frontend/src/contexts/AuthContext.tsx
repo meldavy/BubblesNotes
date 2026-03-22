@@ -87,51 +87,50 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setUser(null);
         }
       } else if (response.status === 401) {
-        // Token expired - try to refresh using the refresh token cookie
-        if (accessToken) {
-          // Access token expired, try to get a new one
-          try {
-            const refreshResponse = await fetch('/auth/refresh', {
-              method: 'POST',
-              credentials: 'include'
-            });
-            
-            if (refreshResponse.ok) {
-              const refreshData = await refreshResponse.json();
-              if (refreshData.accessToken) {
-                accessToken = refreshData.accessToken;
-                // Store new access token in sessionStorage
-                if (accessToken) {
-                  sessionStorage.setItem('access_token', accessToken);
-                }
-                // Retry the auth check with new token
-                const retryHeaders: Record<string, string> = {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${accessToken}`
-                };
-                const retryResponse = await fetch('/api/v1/auth/me', {
-                  headers: retryHeaders,
-                  credentials: 'include'
-                });
-                
-                if (retryResponse.ok) {
-                  const data = await retryResponse.json();
-                  if (data.authenticated) {
-                    setIsAuthenticated(true);
-                    setUser({
-                      userId: data.userId,
-                      email: data.email || 'user@example.com',
-                      name: data.name,
-                      pictureUrl: data.pictureUrl
-                    });
-                    return;
-                  }
+        // Token expired or missing - try to refresh using the refresh token cookie
+        // Note: We attempt refresh regardless of whether accessToken exists,
+        // because in a new tab, accessToken will be null but the refresh token cookie is still available
+        try {
+          const refreshResponse = await fetch('/auth/refresh', {
+            method: 'POST',
+            credentials: 'include'
+          });
+          
+          if (refreshResponse.ok) {
+            const refreshData = await refreshResponse.json();
+            if (refreshData.accessToken) {
+              accessToken = refreshData.accessToken;
+              // Store new access token in sessionStorage
+              if (accessToken) {
+                sessionStorage.setItem('access_token', accessToken);
+              }
+              // Retry the auth check with new token
+              const retryHeaders: Record<string, string> = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${accessToken}`
+              };
+              const retryResponse = await fetch('/api/v1/auth/me', {
+                headers: retryHeaders,
+                credentials: 'include'
+              });
+              
+              if (retryResponse.ok) {
+                const data = await retryResponse.json();
+                if (data.authenticated) {
+                  setIsAuthenticated(true);
+                  setUser({
+                    userId: data.userId,
+                    email: data.email || 'user@example.com',
+                    name: data.name,
+                    pictureUrl: data.pictureUrl
+                  });
+                  return;
                 }
               }
             }
-          } catch (refreshError) {
-            console.error('Token refresh failed:', refreshError);
           }
+        } catch (refreshError) {
+          console.error('Token refresh failed:', refreshError);
         }
         
         // Session expired - clear auth state

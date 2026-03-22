@@ -258,10 +258,12 @@ open class AITaskRepository(private val dataSource: HikariDataSource) {
      */
     fun delete(taskId: Long): Boolean {
         val sql = "DELETE FROM ai_tasks WHERE id = ?"
-
-        getConnection().prepareStatement(sql).use { stmt ->
-            stmt.setLong(1, taskId)
-            return stmt.executeUpdate() > 0
+        getConnection().use { conn ->
+            conn.prepareStatement(sql).use { stmt ->
+                stmt.setQueryTimeout(10)
+                stmt.setLong(1, taskId)
+                return stmt.executeUpdate() > 0
+            }
         }
     }
 
