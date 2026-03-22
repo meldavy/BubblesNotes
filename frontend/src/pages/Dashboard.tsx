@@ -10,6 +10,7 @@ import { InfiniteScroll } from '../components/InfiniteScroll';
 import { SearchBar } from '../components/ui/SearchBar';
 import { useAuth } from '../contexts/AuthContext';
 import { NoteCard, Note } from '../components/NoteCard';
+import { fetchWithAuth } from '../api/apiClient';
 
 export const Dashboard: React.FC = () => {
     const { isAuthenticated, getAccessToken } = useAuth();
@@ -82,16 +83,19 @@ export const Dashboard: React.FC = () => {
             
             if (currentSearchQuery.trim()) {
                 // Use search API
-                const response = await fetch('/api/v1/search', {
-                    method: 'POST',
-                    headers: getAuthHeaders(),
-                    credentials: 'include',
-                    body: JSON.stringify({
-                        query: currentSearchQuery.trim(),
-                        limit: 20,
-                        cursor: nextCursor !== null ? nextCursor : undefined
-                    })
-                });
+                const response = await fetchWithAuth(
+                    '/api/v1/search',
+                    {
+                        method: 'POST',
+                        headers: getAuthHeaders(),
+                        body: JSON.stringify({
+                            query: currentSearchQuery.trim(),
+                            limit: 20,
+                            cursor: nextCursor !== null ? nextCursor : undefined
+                        })
+                    },
+                    getAccessToken
+                );
 
                 if (!response.ok) {
                     throw new Error('Failed to search notes');
@@ -124,10 +128,13 @@ export const Dashboard: React.FC = () => {
                     url.searchParams.set('cursor', nextCursor.toString());
                 }
 
-                const response = await fetch(url.toString(), {
-                    headers: getAuthHeaders(false),
-                    credentials: 'include'
-                });
+                const response = await fetchWithAuth(
+                    url.toString(),
+                    {
+                        headers: getAuthHeaders(false),
+                    },
+                    getAccessToken
+                );
 
                 if (!response.ok) {
                     throw new Error('Failed to fetch notes by tag');
@@ -158,10 +165,13 @@ export const Dashboard: React.FC = () => {
                     url.searchParams.set('cursor', nextCursor.toString());
                 }
 
-                const response = await fetch(url.toString(), {
-                    headers: getAuthHeaders(false),
-                    credentials: 'include'
-                });
+                const response = await fetchWithAuth(
+                    url.toString(),
+                    {
+                        headers: getAuthHeaders(false),
+                    },
+                    getAccessToken
+                );
 
                 if (!response.ok) {
                     throw new Error('Failed to fetch notes');
@@ -209,10 +219,13 @@ export const Dashboard: React.FC = () => {
                 console.warn('No access token available, skipping tags fetch');
                 return;
             }
-            const response = await fetch('/api/v1/tags', {
-                headers: getAuthHeaders(false),
-                credentials: 'include'
-            });
+            const response = await fetchWithAuth(
+                '/api/v1/tags',
+                {
+                    headers: getAuthHeaders(false),
+                },
+                getAccessToken
+            );
             if (response.ok) {
                 const data = await response.json();
                 setAllTags(data);
@@ -310,16 +323,19 @@ export const Dashboard: React.FC = () => {
                 };
                 setNotes(prev => prev.map(n => (n.id === editingNoteId ? optimisticNote : n)));
 
-                const response = await fetch(`/api/v1/notes/${editingNoteId}`, {
-                    method: 'PUT',
-                    headers: getAuthHeaders(),
-                    credentials: 'include',
-                    body: JSON.stringify({
-                        content: noteContent,
-                        title: noteTitle || noteContent.split('\n')[0].substring(0, 100),
-                        tags: noteTags,
-                    }),
-                });
+                const response = await fetchWithAuth(
+                    `/api/v1/notes/${editingNoteId}`,
+                    {
+                        method: 'PUT',
+                        headers: getAuthHeaders(),
+                        body: JSON.stringify({
+                            content: noteContent,
+                            title: noteTitle || noteContent.split('\n')[0].substring(0, 100),
+                            tags: noteTags,
+                        }),
+                    },
+                    getAccessToken
+                );
 
                 if (response.ok) {
                     const updatedNote = await response.json();
@@ -351,16 +367,19 @@ export const Dashboard: React.FC = () => {
                 setNoteContent('');
                 setNoteTitle('');
 
-                const response = await fetch('/api/v1/notes', {
-                      method: 'POST',
-                      headers: getAuthHeaders(),
-                      credentials: 'include',
-                      body: JSON.stringify({
-                          content: noteContent,
-                          title: noteContent.split('\n')[0].substring(0, 100),
-                          tags: noteTags,
-                      }),
-                  });
+                const response = await fetchWithAuth(
+                    '/api/v1/notes',
+                    {
+                        method: 'POST',
+                        headers: getAuthHeaders(),
+                        body: JSON.stringify({
+                            content: noteContent,
+                            title: noteContent.split('\n')[0].substring(0, 100),
+                            tags: noteTags,
+                        }),
+                    },
+                    getAccessToken
+                );
 
                   if (response.ok) {
                        const createdNote = await response.json();
@@ -413,11 +432,14 @@ export const Dashboard: React.FC = () => {
         setNotes(prev => prev.filter(n => n.id !== noteId));
 
         try {
-            const response = await fetch(`/api/v1/notes/${noteId}`, {
-                method: 'DELETE',
-                headers: getAuthHeaders(false),
-                credentials: 'include'
-            });
+            const response = await fetchWithAuth(
+                `/api/v1/notes/${noteId}`,
+                {
+                    method: 'DELETE',
+                    headers: getAuthHeaders(false),
+                },
+                getAccessToken
+            );
 
             if (!response.ok) {
                 throw new Error('Failed to delete note');
