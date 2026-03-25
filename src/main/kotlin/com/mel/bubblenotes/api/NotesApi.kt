@@ -170,6 +170,9 @@ fun Route.notesApi() {
                     call.application.log.debug("AI Enhancement Service not available, skipping AI task creation")
                 }
 
+                // Images are now independent - they are referenced by path in note content
+                // No auto-association needed
+
                 // Return the full note including preview data for immediate UI update
                 val createdNote = note.copy(id = createdId)
                 call.respond(HttpStatusCode.Created, createdNote)

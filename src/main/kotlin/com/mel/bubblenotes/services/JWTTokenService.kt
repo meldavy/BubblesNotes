@@ -183,10 +183,11 @@ open class JWTTokenService(
         // Rotate the token: mark old as used, create new with parent reference
         // The rotate method now generates the new token internally and returns (hash, token)
         val newExpiresAt = Instant.now().plusSeconds(refreshTokenTtlSeconds)
-        val (newRefreshTokenHash, newRefreshTokenString) = refreshTokenRepository.rotate(
-            oldTokenHash = refreshToken.tokenHash,
-            newExpiresAt = newExpiresAt.toEpochMilli(),
-        )
+        val (newRefreshTokenHash, newRefreshTokenString) =
+            refreshTokenRepository.rotate(
+                oldTokenHash = refreshToken.tokenHash,
+                newExpiresAt = newExpiresAt.toEpochMilli(),
+            )
 
         // Generate new access token
         val now = Instant.now()

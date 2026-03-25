@@ -139,6 +139,19 @@ class AIEnhancementService(
                 "processTask: Prepared result - title: ${result.aiTitle}, summary: ${result.aiSummary != null}, tags: ${result.aiTags.size}",
             )
 
+            // Check if the result is empty (AI returned null/empty response)
+            val isEmptyResult =
+                result.aiTitle.isNullOrBlank() &&
+                    result.aiSummary.isNullOrBlank() &&
+                    result.aiTags.isEmpty()
+
+            if (isEmptyResult) {
+                logger.warn("processTask: AI returned empty result for task $taskId, resetting to PENDING for retry")
+                aiTaskRepository.resetToPending(taskId)
+                logger.info("processTask: Reset task $taskId to PENDING due to empty AI response")
+                return
+            }
+
             // Update task as completed
             logger.debug("processTask: Marking task $taskId as completed")
             if (aiTaskRepository.setCompleted(taskId, result)) {

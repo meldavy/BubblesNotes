@@ -1,5 +1,6 @@
 package com.mel.bubblenotes
 
+import com.mel.bubblenotes.api.fileAttachmentRoutes
 import com.mel.bubblenotes.api.notesApi
 import com.mel.bubblenotes.api.searchApi
 import com.mel.bubblenotes.api.tagsApi
@@ -45,6 +46,8 @@ fun Application.configureRouting() {
         tagsApi()
         // Search API
         searchApi()
+        // File Attachment API (images and documents)
+        fileAttachmentRoutes()
 
         get<Articles> { article ->
             call.respond("List of articles sorted starting from ${article.sort}")

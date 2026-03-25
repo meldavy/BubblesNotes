@@ -4,6 +4,13 @@ import io.ktor.server.application.*
 import io.ktor.util.*
 
 /**
+ * Base storage directory for file attachments.
+ * Reads from FILE_STORAGE_DIR environment variable or defaults to /app/files.
+ */
+const val FILE_STORAGE_DIR_ENV = "FILE_STORAGE_DIR"
+val baseStorageDir: String = System.getenv(FILE_STORAGE_DIR_ENV) ?: "/app/files"
+
+/**
  * List of sensitive environment variable patterns that should be redacted in logs.
  * These patterns are matched case-insensitively against variable names.
  */

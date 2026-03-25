@@ -10,6 +10,7 @@ import com.mel.bubblenotes.api.tagService
 import com.mel.bubblenotes.api.urlPreviewService
 import com.mel.bubblenotes.repositories.AITaskRepository
 import com.mel.bubblenotes.repositories.AttachmentRepository
+import com.mel.bubblenotes.repositories.FileAttachmentRepository
 import com.mel.bubblenotes.repositories.NoteRepository
 import com.mel.bubblenotes.repositories.NoteTagRepository
 import com.mel.bubblenotes.repositories.RefreshTokenRepository
@@ -18,6 +19,7 @@ import com.mel.bubblenotes.repositories.UserRepository
 import com.mel.bubblenotes.services.AIEnhancementService
 import com.mel.bubblenotes.services.ApiKeyService
 import com.mel.bubblenotes.services.EncryptionService
+import com.mel.bubblenotes.services.FileAttachmentService
 import com.mel.bubblenotes.services.JWTTokenService
 import com.mel.bubblenotes.services.OpenAIClient
 import com.mel.bubblenotes.services.SessionStorage
@@ -133,6 +135,21 @@ class ApplicationModule(
 
     @Provides
     @Singleton
+    fun provideFileAttachmentRepository(): FileAttachmentRepository {
+        return FileAttachmentRepository(databaseService.getDataSource())
+    }
+
+    @Provides
+    @Singleton
+    fun provideFileAttachmentService(
+        fileAttachmentRepository: FileAttachmentRepository,
+        encryptionService: EncryptionService,
+    ): FileAttachmentService {
+        return FileAttachmentService(fileAttachmentRepository, encryptionService)
+    }
+
+    @Provides
+    @Singleton
     fun provideOpenAIClient(): OpenAIClient {
         val apiKey = getRequiredConfigProperty("ai.openai.api-key")
         val apiUrl = getRequiredConfigProperty("ai.openai.api-url")
@@ -202,6 +219,16 @@ fun Application.configureDI() {
     val aiEnhancementService = injector.getInstance(AIEnhancementService::class.java)
     com.mel.bubblenotes.api.aiEnhancementService = aiEnhancementService
     environment.log.info("AI Enhancement Service initialized for API routes")
+
+    // Initialize File Attachment Service for API routes
+    val fileAttachmentService = injector.getInstance(FileAttachmentService::class.java)
+    com.mel.bubblenotes.api.fileAttachmentService = fileAttachmentService
+    environment.log.info("File Attachment Service initialized for API routes")
+
+    // Initialize Encryption Service for API routes
+    val encryptionService = injector.getInstance(EncryptionService::class.java)
+    com.mel.bubblenotes.api.encryptionService = encryptionService
+    environment.log.info("Encryption Service initialized for API routes")
 
     // Log DI initialization
     environment.log.info("Dependency injection configured with Guice")

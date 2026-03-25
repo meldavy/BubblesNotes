@@ -81,6 +81,22 @@ fun Application.configureJWTAuthentication(
                 JWT.require(Algorithm.HMAC256(secretKey))
                     .build(),
             )
+            // Custom token extraction: check Authorization header first, then access_token cookie
+            authHeader { call ->
+                // First try Authorization header
+                val authHeader = call.request.headers["Authorization"]
+                var token = authHeader?.substringAfter("Bearer ", "")?.trim()
+
+                // If no header, try access_token cookie
+                if (token.isNullOrBlank()) {
+                    token = call.request.cookies["access_token"]
+                }
+
+                // Return HttpAuthHeader if token found, null otherwise
+                return@authHeader token?.takeIf { it.isNotBlank() }?.let {
+                    io.ktor.http.auth.HttpAuthHeader.Single("Bearer", it)
+                }
+            }
             validate { credentials ->
                 // Extract user ID from JWT subject
                 val userIdString = credentials.payload.subject
@@ -550,7 +566,8 @@ fun Application.configureSecurity(
 
                 // Store refresh token in HttpOnly, Secure cookie
                 val isProduction = config.propertyOrNull("ktor.deployment.environment")?.getString() == "production"
-                val cookie =
+                val sameSiteValue = if (isProduction) "None" else "Lax"
+                val refreshCookie =
                     Cookie(
                         name = "refresh_token",
                         value = tokenPair.refreshToken,
@@ -558,9 +575,26 @@ fun Application.configureSecurity(
                         httpOnly = true,
                         secure = isProduction,
                         maxAge = (tokenPair.refreshTokenExpiresAt / 1000).toInt(),
-                        extensions = mapOf("SameSite" to "Lax"),
+                        extensions = mapOf("SameSite" to sameSiteValue),
                     )
-                call.response.cookies.append(cookie)
+                call.response.cookies.append(refreshCookie)
+
+                // Store access token in a cookie for browser-native requests (e.g., <img> tags)
+                // This cookie is NOT HttpOnly so JavaScript can still access it, but it will be
+                // automatically sent with all requests including image loads
+                val accessCookie =
+                    Cookie(
+                        name = "access_token",
+                        value = tokenPair.accessToken,
+                        path = "/",
+                        // Not HttpOnly so JS can still read it if needed
+                        httpOnly = false,
+                        secure = isProduction,
+                        maxAge = (tokenPair.accessTokenExpiresAt / 1000).toInt(),
+                        extensions = mapOf("SameSite" to sameSiteValue),
+                    )
+                call.response.cookies.append(accessCookie)
+
                 call.application.log.info("OAuth callback - Refresh token stored securely")
 
                 call.application.log.info(
@@ -713,6 +747,7 @@ fun Application.configureSecurity(
 
                 // Set new refresh token in cookie
                 val isProduction = config.propertyOrNull("ktor.deployment.environment")?.getString() == "production"
+                val sameSiteValue = if (isProduction) "None" else "Lax"
                 val cookie =
                     Cookie(
                         name = "refresh_token",
@@ -721,7 +756,7 @@ fun Application.configureSecurity(
                         httpOnly = true,
                         secure = isProduction,
                         maxAge = (newTokenPair.refreshTokenExpiresAt / 1000).toInt(),
-                        extensions = mapOf("SameSite" to "Lax"),
+                        extensions = mapOf("SameSite" to sameSiteValue),
                     )
                 call.response.cookies.append(cookie)
 

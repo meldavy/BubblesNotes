@@ -3,11 +3,11 @@ package com.mel.bubblenotes
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import io.ktor.server.application.*
+import io.ktor.server.application.ApplicationStopped
 import io.ktor.util.*
 import org.flywaydb.core.Flyway
 import java.sql.Connection
 import kotlin.concurrent.fixedRateTimer
-import io.ktor.server.application.ApplicationStopped
 
 class DatabaseService(private val dataSource: HikariDataSource) {
     /**
@@ -75,7 +75,12 @@ fun Application.configureDatabases() {
             connectionTestQuery = "SELECT 1"
             // Leak detection - log warning if connection held longer than this (0 = disabled)
             // Set to 0 in production, enable in development for debugging
-            leakDetectionThreshold = try { config.property("db.leak-detection-threshold").getString().toLong() } catch (e: Exception) { 0L }
+            leakDetectionThreshold =
+                try {
+                    config.property("db.leak-detection-threshold").getString().toLong()
+                } catch (e: Exception) {
+                    0L
+                }
             // Max lifetime of a connection (4 minutes) - MUST be less than DB server timeout
             // Cloud PostgreSQL (AWS RDS, Heroku, etc.) typically has 5-10 minute idle timeout
             // Setting to 4 minutes (240000ms) ensures we close before server does
@@ -83,7 +88,12 @@ fun Application.configureDatabases() {
             // Idle timeout (3 minutes) - must be less than maxLifetime
             idleTimeout = 180000L
             // Keepalive to prevent aggressive NAT/LB idle drops (must be < idleTimeout and maxLifetime)
-            keepaliveTime = try { config.property("db.keepalive-time").getString().toLong() } catch (e: Exception) { 120000L }
+            keepaliveTime =
+                try {
+                    config.property("db.keepalive-time").getString().toLong()
+                } catch (e: Exception) {
+                    120000L
+                }
             // Connection timeout (30 seconds) - fail fast if pool is exhausted
             connectionTimeout = 30000L
         }
@@ -110,11 +120,12 @@ fun Application.configureDatabases() {
     runCatching {
         val mxBean = dataSource.hikariPoolMXBean
         if (mxBean != null) {
-            val timer = fixedRateTimer(name = "hikari-metrics-logger", daemon = true, initialDelay = 10000L, period = 15000L) {
-                environment.log.info(
-                    "Hikari metrics — active=${mxBean.activeConnections}, idle=${mxBean.idleConnections}, pending=${mxBean.threadsAwaitingConnection}, total=${mxBean.totalConnections}"
-                )
-            }
+            val timer =
+                fixedRateTimer(name = "hikari-metrics-logger", daemon = true, initialDelay = 10000L, period = 15000L) {
+                    environment.log.info(
+                        "Hikari metrics — active=${mxBean.activeConnections}, idle=${mxBean.idleConnections}, pending=${mxBean.threadsAwaitingConnection}, total=${mxBean.totalConnections}",
+                    )
+                }
             // Stop logging when application stops
             environment.monitor.subscribe(ApplicationStopped) {
                 timer.cancel()

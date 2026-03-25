@@ -1,8 +1,12 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { Card } from './ui/Card';
 import { MarkdownPreview } from './MarkdownPreview';
 import { URLPreviewList } from './URLPreview';
 import { TagChip } from './ui/TagChip';
+import { ImageModal } from './ui/ImageModal';
+import { extractAttachments, isFileAttachmentUrl } from '../utils/attachmentParser';
+import { useAuth } from '../contexts/AuthContext';
+import { fetchWithAuth } from '../api/apiClient';
 
 interface URLPreviewData {
   url: string;
@@ -11,6 +15,11 @@ interface URLPreviewData {
   favicon?: string;
   image?: string;
   siteName?: string;
+}
+
+interface AttachmentBadgeProps {
+  fileName: string;
+  url: string;
 }
 
 export interface Note {
@@ -37,36 +46,128 @@ export interface NoteCardProps {
 }
 
 /**
+ * AttachmentBadge component - displays a clickable badge for file attachments
+ * Styled to match TagChip for visual consistency
+ */
+const AttachmentBadge: React.FC<AttachmentBadgeProps> = ({ fileName, url }) => {
+    const { getAccessToken } = useAuth();
+
+    const handleDownload = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        e.preventDefault();
+
+        // Check if this is a file attachment URL that requires authentication
+        if (isFileAttachmentUrl(url)) {
+            try {
+                const response = await fetchWithAuth(
+                    url,
+                    { method: 'GET' },
+                    getAccessToken
+                );
+
+                if (!response.ok) {
+                    console.error('Failed to download file:', response.status);
+                    alert('Failed to download file. Please try again.');
+                    return;
+                }
+
+                const blob = await response.blob();
+                const downloadUrl = URL.createObjectURL(blob);
+
+                // Use the fileName prop directly for the download filename
+                const link = document.createElement('a');
+                link.href = downloadUrl;
+                link.download = fileName;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(downloadUrl);
+            } catch (error) {
+                console.error('Error downloading file:', error);
+                alert('Error downloading file. Please try again.');
+            }
+        } else {
+            // For non-authenticated URLs, use window.open
+            window.open(url, '_blank');
+        }
+    };
+
+    return (
+        <a
+            onClick={handleDownload}
+            className="
+                inline-flex items-center gap-1
+                rounded-md
+                px-2 py-1
+                text-xs font-medium
+                min-h-0 min-w-0
+                bg-neutral-400/10
+                text-neutral-600
+                hover:bg-neutral-400/20
+                hover:text-neutral-800
+                transition-colors
+            "
+            title={`Open ${fileName}`}
+        >
+            <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+            </svg>
+            <span className="truncate max-w-[320px]">
+                {fileName}
+            </span>
+        </a>
+    );
+};
+
+/**
  * NoteCard component - displays a single note card
  * Shows title, content preview, tags, URL previews, and action buttons
  */
 export const NoteCard: React.FC<NoteCardProps> = ({
-  note,
-  isEditing,
-  isDeleting,
-  onEdit,
-  onDelete,
+    note,
+    isEditing,
+    isDeleting,
+    onEdit,
+    onDelete,
 }) => {
-  // Parse URL previews from previewData
-  const urlPreviews: URLPreviewData[] = React.useMemo(() => {
-    if (!note.previewData) return [];
-    try {
-      return JSON.parse(note.previewData);
-    } catch (e) {
-      return [];
-    }
-  }, [note.previewData]);
+    // Parse URL previews from previewData
+    const urlPreviews: URLPreviewData[] = React.useMemo(() => {
+        if (!note.previewData) return [];
+        try {
+            return JSON.parse(note.previewData);
+        } catch (e) {
+            return [];
+        }
+    }, [note.previewData]);
 
-  const handleEdit = () => {
-    onEdit(note);
-  };
+    // Extract file attachments from content
+    const attachments = React.useMemo(() => {
+        return extractAttachments(note.content);
+    }, [note.content]);
 
-  const handleDelete = () => {
-    onDelete(note.id);
-  };
+    // State for image modal
+    const [imageModalOpen, setImageModalOpen] = useState(false);
+    const [selectedImageBlobUrl, setSelectedImageBlobUrl] = useState<string | null>(null);
+    const [selectedImageAlt, setSelectedImageAlt] = useState<string>('Image');
+
+    const handleEdit = () => {
+        onEdit(note);
+    };
+
+    const handleDelete = () => {
+        onDelete(note.id);
+    };
+
+    // Handle image click to open modal - memoized to prevent re-creation on every render
+    const handleImageClick = useCallback((blobUrl: string, alt: string) => {
+        setSelectedImageBlobUrl(blobUrl);
+        setSelectedImageAlt(alt);
+        setImageModalOpen(true);
+    }, []);
 
   return (
-    <Card
+    <>
+      <Card
       hoverable
       className={`animate-slide-up transition-opacity duration-200 ${
         isEditing ? 'opacity-50 pointer-events-none' : ''
@@ -98,6 +199,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({
         <MarkdownPreview
           content={note.content}
           className="text-sm"
+          onImageClick={handleImageClick}
         />
 
         {/* Tags (user-created) */}
@@ -132,6 +234,19 @@ export const NoteCard: React.FC<NoteCardProps> = ({
           <div className="mt-3 pt-3 border-t border-neutral-200">
             <h4 className="text-xs font-semibold text-neutral-500 mb-2">Links</h4>
             <URLPreviewList previews={urlPreviews} />
+          </div>
+        )}
+
+        {/* File Attachments */}
+        {attachments.length > 0 && (
+          <div className="mt-2 mb-2 flex flex-wrap gap-1.5">
+            {attachments.map((attachment, index) => (
+              <AttachmentBadge
+                key={`attachment-${index}`}
+                fileName={attachment.fileName}
+                url={attachment.url}
+              />
+            ))}
           </div>
         )}
 
@@ -211,7 +326,18 @@ export const NoteCard: React.FC<NoteCardProps> = ({
           </div>
         </footer>
       </article>
-    </Card>
+      </Card>
+      {/* Image Modal */}
+      <ImageModal
+        isOpen={imageModalOpen}
+        onClose={() => {
+          setImageModalOpen(false);
+          setSelectedImageBlobUrl(null);
+        }}
+        blobUrl={selectedImageBlobUrl || undefined}
+        alt={selectedImageAlt}
+      />
+    </>
   );
 };
 

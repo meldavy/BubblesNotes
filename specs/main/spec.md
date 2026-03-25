@@ -248,6 +248,7 @@ As a developer user, I want to access my notes via REST APIs with an API key, so
 7. Client-side caching will use a time-based strategy (e.g., 30-second cache for note lists)
 8. Auto-save frequency balances network load with data safety (implementation detail to be determined in planning)
 9. Last-write-wins strategy for concurrent edits; versioning system tracks all changes
+10. **Storage System**: The storage system MUST encrypt files at rest, but API/URL endpoints MUST return decrypted images to authenticated users. This requires a dedicated `StorageService` that handles encryption on write and decryption on read.
 
 ## Environment Variables Required
 
@@ -264,8 +265,178 @@ As a developer user, I want to access my notes via REST APIs with an API key, so
 | `AI_API_URL` | OpenAI-compatible API endpoint URL | Conditional (AI features) |
 | `AI_MODEL_ID` | Model identifier for AI service | Conditional (AI features) |
 | `MAX_ATTACHMENT_SIZE` | Maximum file upload size in bytes | No (default: 25MB) |
+| `ENCRYPTION_MASTER_KEY` | Master encryption key for file attachments (minimum 64 bytes) | Yes |
 
-## Technical Constraints (from Constitution)
+## Security Design: Enhanced Encryption at Rest
+
+**Reference**: See [`specs/main/encryption-at-rest-design.md`](encryption-at-rest-design.md) for complete design documentation.
+
+### Dual-Key Encryption Overview
+
+The encryption-at-rest mechanism uses a **deterministic but unstored per-user key** derived from:
+1. **Server Master Key** (`ENCRYPTION_MASTER_KEY` environment variable)
+2. **User OAuth Token** (stored encrypted in `users.oauth_token`)
+3. **Per-User Random Salt** (stored in `users.file_encryption_salt`)
+
+### Security Guarantee
+
+> **Isolation Property**: Even if the server's master encryption key is compromised, an attacker cannot access cross-user file data without also compromising each user's OAuth identity tokens.
+
+### Key Derivation Flow
+
+```
+Master Key + OAuth Token Subject + Per-User Salt
+           │
+           ▼
+    PBKDF2 (x2) + HKDF-SHA256
+           │
+           ▼
+    Per-User AES-256 Key (unstored, derived on-demand)
+           │
+           ▼
+    AES-256-GCM File Encryption
+```
+
+### Implementation Checklist
+
+- [ ] Add `file_encryption_salt` column to `users` table (32 bytes, random)
+- [ ] Add `encryption_key_version` column to `users` table (for key rotation)
+- [ ] Implement `FileEncryptionService` with dual-key derivation
+- [ ] Update `StorageService` to use per-user encryption keys
+- [ ] Migrate existing files to use new encryption scheme
+- [ ] Implement key rotation procedure for master key updates
+
+---
+
+## Implementation Gaps & TODOs
+
+### Storage Service (HIGH PRIORITY)
+
+**Current State**: The `Attachment` model and `AttachmentRepository` exist in the codebase, but there is **no dedicated storage service** that handles file encryption/decryption. The `encrypted_data` field in the database is not being populated or decrypted during retrieval.
+
+**Required Implementation**:
+
+1. **StorageService Interface**:
+   ```kotlin
+   interface StorageService {
+       /**
+        * Stores a file, encrypting it before writing to storage.
+        * @param data The raw file data (will be encrypted)
+        * @param userId The user owning this file (for encryption key)
+        * @param contentType The MIME type of the file
+        * @return The storage path identifier for later retrieval
+        */
+       fun storeFile(data: ByteArray, userId: UUID, contentType: String): String
+       
+       /**
+        * Retrieves and decrypts a file from storage.
+        * @param storagePath The storage path identifier
+        * @param userId The user requesting access (for decryption key)
+        * @return The decrypted file data, or null if not found
+        */
+       fun retrieveFile(storagePath: String, userId: UUID): ByteArray?
+       
+       /**
+        * Deletes a file from storage.
+        */
+       fun deleteFile(storagePath: String): Boolean
+   }
+   ```
+
+2. **Encryption Flow**:
+   - Files MUST be encrypted using `EncryptionService` with per-user encryption salt
+   - Encrypted files stored in: `uploads/{userId}/{noteId}/{timestamp}_{uuid}.enc`
+   - Decryption occurs only when serving files via API to authenticated users
+   - Decrypted data is NEVER persisted, only streamed to clients
+
+3. **API Endpoints Needed**:
+   - `POST /api/v1/notes/{noteId}/attachments` - Upload and encrypt file
+   - `GET /api/v1/attachments/{id}/download` - Download decrypted file
+   - `DELETE /api/v1/attachments/{id}` - Delete attachment and encrypted file
+
+4. **Development vs Production**:
+   - **Development**: Local file system storage with encryption
+   - **Production**: Cloud storage (AWS S3, GCS) with encryption at rest
+
+**Related Files**:
+- [`Attachment.kt`](../../src/main/kotlin/com/mel/bubblenotes/models/Attachment.kt) - Model exists but `encryptedData` not used
+- [`AttachmentRepository.kt`](../../src/main/kotlin/com/mel/bubblenotes/repositories/AttachmentRepository.kt) - Stores `encrypted_data` field but no encryption logic
+- [`EncryptionService.kt`](../../src/main/kotlin/com/mel/bubblenotes/services/EncryptionService.kt) - Available for use by storage service
+
+---
+
+## Security Considerations
+
+### Enhanced Encryption at Rest (Dual-Key)
+
+**Reference**: See [`specs/main/encryption-at-rest-design.md`](encryption-at-rest-design.md) for complete design documentation.
+
+**Requirement**: Files MUST be encrypted using a per-user key derived from:
+1. Server master encryption key (`ENCRYPTION_MASTER_KEY`)
+2. User's OAuth identity token (extracted `sub` claim)
+3. Per-user random salt (`users.file_encryption_salt`)
+
+**Security Guarantee**: Even if the server's master encryption key is compromised, an attacker cannot access cross-user file data without also compromising each user's OAuth identity tokens.
+
+**Implementation Checklist**:
+- [ ] Add `file_encryption_salt` column to `users` table (32 bytes, random)
+- [ ] Add `encryption_key_version` column to `users` table (for key rotation)
+- [ ] Implement `FileEncryptionService` with dual-key derivation (PBKDF2 + HKDF)
+- [ ] Update `StorageService` to use per-user encryption keys
+- [ ] Migrate existing files to use new encryption scheme
+- [ ] Implement key rotation procedure for master key updates
+
+**Cryptographic Standards**:
+- Key Derivation: PBKDF2-HMAC-SHA256 (65,536 iterations) + HKDF-SHA256
+- Encryption: AES-256-GCM with 12-byte IV and 16-byte authentication tag
+- Salt: 32 bytes cryptographically secure random per user
+
+---
+
+### Storage Encryption (Legacy - See Dual-Key Above)
+
+**Note**: The legacy single-key encryption approach is being superseded by the dual-key design above.
+
+**Implementation Checklist**:
+- [ ] Storage service encrypts files before writing to disk/cloud storage
+- [ ] Storage service decrypts files when serving via API/URL
+- [ ] Encryption uses per-user keys (via [`EncryptionService`](../../src/main/kotlin/com/mel/bubblenotes/services/EncryptionService.kt))
+- [ ] Decrypted data is never persisted, only streamed to clients
+- [ ] Storage paths reference encrypted file identifiers, not plaintext content
+
+**Security Rationale**: This ensures data remains protected at rest (in case of storage breach) while maintaining usability for authenticated users.
+
+---
+
+### Attachment Ownership & Authorization
+
+**Requirement**: ONLY the uploader/owner of an attachment (or a note they own) MUST be able to access, download, or delete that attachment. No other user should have access.
+
+**Implementation Checklist**:
+- [ ] All attachment API endpoints MUST verify the authenticated user owns the attachment
+- [ ] Download endpoint MUST check `attachment.user_id` matches the authenticated user's ID
+- [ ] Delete endpoint MUST verify ownership before removing the attachment
+- [ ] Storage paths MUST include user ID to prevent path traversal attacks (`uploads/{userId}/{...}`)
+- [ ] API responses MUST NOT leak information about attachments owned by other users (use 404 instead of 403 for unauthorized access to prevent user enumeration)
+- [ ] Attachments inherit note-level permissions: user must own the parent note to access its attachments
+
+**Authorization Flow**:
+```
+1. User requests attachment download: GET /api/v1/attachments/{id}/download
+2. Server retrieves attachment record from database
+3. Server verifies: attachment.user_id == authenticated_user.id
+4. If verification fails: return 404 Not Found (do not reveal if attachment exists)
+5. If verification succeeds: decrypt and stream file to user
+```
+
+**Related API Endpoints**:
+- `POST /api/v1/notes/{noteId}/attachments` - Owner is the authenticated user; verify note ownership
+- `GET /api/v1/attachments/{id}/download` - Verify attachment.user_id matches authenticated user
+- `DELETE /api/v1/attachments/{id}` - Verify attachment.user_id matches authenticated user
+
+---
+
+## Success Criteria *(mandatory)*
 
 - All user-domain data MUST be encrypted at rest with keys derived from OAuth identity tokens
 - Encryption keys MUST NEVER be stored on the server side
