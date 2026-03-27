@@ -17,6 +17,7 @@ import com.mel.bubblenotes.repositories.RefreshTokenRepository
 import com.mel.bubblenotes.repositories.TagRepository
 import com.mel.bubblenotes.repositories.UserRepository
 import com.mel.bubblenotes.services.AIEnhancementService
+import com.mel.bubblenotes.utils.ContentDriftDetector
 import com.mel.bubblenotes.services.ApiKeyService
 import com.mel.bubblenotes.services.EncryptionService
 import com.mel.bubblenotes.services.FileAttachmentService
@@ -168,16 +169,24 @@ class ApplicationModule(
 
     @Provides
     @Singleton
+    fun provideContentDriftDetector(): ContentDriftDetector {
+        return ContentDriftDetector(changeThreshold = 5)
+    }
+
+    @Provides
+    @Singleton
     fun provideAIEnhancementService(
         openAIClient: OpenAIClient,
         aiTaskRepository: AITaskRepository,
         noteRepository: NoteRepository,
+        contentDriftDetector: ContentDriftDetector,
     ): AIEnhancementService {
         val service =
             AIEnhancementService(
                 openAIClient = openAIClient,
                 aiTaskRepository = aiTaskRepository,
                 noteRepository = noteRepository,
+                contentDriftDetector = contentDriftDetector,
             )
         // Start the scheduler
         service.start()

@@ -118,10 +118,13 @@ fun Route.notesApi() {
                     }
                 }
 
+                // Filter out previews that only have URL (no metadata)
+                val filteredPreviews = previews.filter { it.hasMetadata() }
+
                 // Store preview data as JSON string
                 val previewJson =
-                    if (previews.isNotEmpty()) {
-                        jsonSerializer.encodeToString(previews)
+                    if (filteredPreviews.isNotEmpty()) {
+                        jsonSerializer.encodeToString(filteredPreviews)
                     } else {
                         null
                     }
@@ -320,9 +323,12 @@ fun Route.notesApi() {
                         }
                     }
 
+                    // Filter out previews that only have URL (no metadata)
+                    val filteredPreviews = previews.filter { it.hasMetadata() }
+
                     previewData =
-                        if (previews.isNotEmpty()) {
-                            jsonSerializer.encodeToString(previews)
+                        if (filteredPreviews.isNotEmpty()) {
+                            jsonSerializer.encodeToString(filteredPreviews)
                         } else {
                             null
                         }
@@ -342,12 +348,23 @@ fun Route.notesApi() {
                     )
 
                 if (repo.update(updatedNote)) {
-                    // Create AI task for enhancement if content changed (async processing)
+                    // Create AI task for enhancement if content changed significantly (async processing)
                     val aiService = aiEnhancementService
                     if (aiService != null && noteData.content != null && noteData.content != existingNote.content) {
                         try {
-                            val taskId = aiService.createAITask(id)
-                            call.application.log.info("Created AI task $taskId for updated note $id")
+                            // Use drift detection to avoid AI tasks for minor changes like checkbox toggles
+                            val taskId = aiService.createAITaskWithDriftCheck(
+                                noteId = id,
+                                oldContent = existingNote.content,
+                                newContent = noteData.content,
+                            )
+                            if (taskId != null) {
+                                call.application.log.info("Created AI task $taskId for updated note $id")
+                            } else {
+                                call.application.log.info(
+                                    "Skipped AI task creation for note $id - content drift below threshold (minor change like checkbox toggle)"
+                                )
+                            }
                         } catch (e: Exception) {
                             call.application.log.warn("Failed to create AI task for note $id: ${e.message}")
                         }

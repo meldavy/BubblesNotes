@@ -4,6 +4,7 @@ import com.mel.bubblenotes.models.Note
 import com.mel.bubblenotes.repositories.AITaskRepository
 import com.mel.bubblenotes.repositories.AITaskRepository.AITaskResult
 import com.mel.bubblenotes.repositories.NoteRepository
+import com.mel.bubblenotes.utils.ContentDriftDetector
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,6 +28,7 @@ class AIEnhancementService(
     // 30 seconds default
     private val schedulerIntervalMs: Long = 30000,
     private val workerId: String = "worker-${ProcessHandle.current().pid()}-${Thread.currentThread().id}",
+    private val contentDriftDetector: ContentDriftDetector = ContentDriftDetector(changeThreshold = 5),
 ) {
     companion object {
         private val logger: Logger = LoggerFactory.getLogger(AIEnhancementService::class.java)
@@ -42,9 +44,9 @@ class AIEnhancementService(
      * Create an AI task for a note.
      * This will be processed asynchronously by the scheduler.
      * @param noteId The note ID to enhance
-     * @return The created task ID
+     * @return The created task ID, or null if no significant content drift detected
      */
-    fun createAITask(noteId: Long): Long {
+    fun createAITask(noteId: Long): Long? {
         logger.info("createAITask: Creating AI task for note $noteId")
         val taskId = aiTaskRepository.create(noteId)
         logger.info("createAITask: Created AI task $taskId for note $noteId")
@@ -54,6 +56,43 @@ class AIEnhancementService(
         scheduleTask(taskId)
 
         return taskId
+    }
+
+    /**
+     * Create an AI task for a note only if there is significant content drift.
+     * This prevents unnecessary AI processing for minor changes like checkbox toggles.
+     *
+     * @param noteId The note ID to enhance
+     * @param oldContent The previous content of the note
+     * @param newContent The new content of the note
+     * @return The created task ID, or null if no significant content drift detected
+     */
+    fun createAITaskWithDriftCheck(noteId: Long, oldContent: String, newContent: String): Long? {
+        val driftResult = contentDriftDetector.detectDrift(oldContent, newContent)
+
+        if (!driftResult.hasSignificantChange) {
+            logger.info(
+                "createAITaskWithDriftCheck: Skipping AI task creation for note $noteId - " +
+                    "only ${driftResult.charactersChanged} characters changed (threshold: ${contentDriftDetector.changeThreshold})"
+            )
+            return null
+        }
+
+        logger.info(
+            "createAITaskWithDriftCheck: Significant change detected for note $noteId - " +
+                "${driftResult.charactersChanged} characters changed (${String.format("%.1f", driftResult.changePercentage * 100)}%)"
+        )
+        return createAITask(noteId)
+    }
+
+    /**
+     * Check if there is significant content drift between old and new content.
+     * @param oldContent The previous content
+     * @param newContent The new content
+     * @return true if there is significant change, false otherwise
+     */
+    fun hasSignificantContentDrift(oldContent: String, newContent: String): Boolean {
+        return contentDriftDetector.hasSignificantChange(oldContent, newContent)
     }
 
     /**

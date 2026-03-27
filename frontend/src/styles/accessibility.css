@@ -387,16 +387,102 @@ textarea[aria-invalid="true"]:focus {
 }
 
 /* ============================================
-   Touch Target Sizes - Mobile Accessibility
-   ============================================ */
+    Touch Target Sizes - Mobile Accessibility
+    ============================================ */
 
-/* Minimum touch target size (44x44px per WCAG) */
+/* Minimum touch target size (44x44px per WCAG) for interactive elements */
 button,
-a,
-input[type="checkbox"],
-input[type="radio"] {
+a {
   min-height: 44px;
   min-width: 44px;
+}
+
+/* Checkboxes and radios - use natural size, not touch target size */
+input[type="checkbox"],
+input[type="radio"] {
+  min-height: unset;
+  min-width: unset;
+  height: 15px;
+  width: 15px;
+  margin: 0;
+  vertical-align: middle;
+  cursor: default;
+}
+
+/* Task list items - align checkbox with text */
+li.task-list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+li.task-list-item input[type="checkbox"] {
+  flex-shrink: 0;
+}
+
+/* Interactive checkboxes (in editor preview) */
+li.task-list-item input[type="checkbox"].interactive {
+  cursor: pointer;
+}
+
+/* Ensure checkboxes have visible border and proper contrast */
+input[type="checkbox"]:not([disabled]) {
+  border: 2px solid var(--neutral-700);
+  background-color: white;
+}
+
+input[type="checkbox"][disabled] {
+  border: 2px solid var(--neutral-600);
+  background-color: white;
+  cursor: default;
+}
+
+/* Checked state with better visibility */
+input[type="checkbox"]:checked {
+  background-color: var(--primary-600);
+  border-color: var(--primary-600);
+}
+
+input[type="checkbox"].interactive:checked {
+  background-color: var(--primary-600);
+  border-color: var(--primary-600);
+}
+
+/* Focus indicator for accessibility */
+input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--primary-500);
+  outline-offset: 2px;
+}
+
+/* Task checkbox button styles for interactive preview */
+.task-checkbox-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  margin-right: 8px;
+}
+
+.task-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border: 2px solid var(--neutral-600);
+  background-color: white;
+  border-radius: 3px;
+  font-size: 10px;
+  color: white;
+}
+
+.task-checkbox.checked {
+  background-color: var(--primary-600);
+  border-color: var(--primary-600);
 }
 
 /* Icon buttons - ensure adequate hit area */

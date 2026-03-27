@@ -20,6 +20,7 @@ import {
     getImageInputAcceptAttribute,
     isFileAllowed,
 } from '../utils/attachmentParser';
+import { parseTaskItems, toggleTaskCheckbox } from '../utils/taskListUtils';
 
 // Maximum file size: 10MB
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -86,6 +87,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     const [viewMode, setViewMode] = useState<'edit' | 'preview' | 'split'>('edit');
     const [saveStatus, setSaveStatus] = useState<'saving' | 'saved' | 'unsaved' | 'error'>('saved');
     const [saveError, setSaveError] = useState<string | null>(null);
+    const [pendingToggles, setPendingToggles] = useState<Set<number>>(new Set());
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [previews, setPreviews] = useState<URLPreviewData[]>([]);
@@ -260,6 +262,32 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
         setViewMode(mode);
     };
 
+    // Handle checkbox toggle in task lists
+    const handleCheckboxToggle = useCallback(async (lineIndex: number) => {
+        // Mark as pending for visual feedback
+        setPendingToggles(prev => new Set(prev).add(lineIndex));
+
+        // Toggle the checkbox in the content
+        const result = toggleTaskCheckbox(value, lineIndex);
+        
+        if (result.success && result.updatedContent) {
+            // Update the content - this will trigger the existing auto-save mechanism
+            onChange(result.updatedContent);
+        } else {
+            console.error('Checkbox toggle failed:', result.error);
+            toast.error('Failed to toggle task');
+        }
+
+        // Remove from pending after a short delay (or immediately since we updated content)
+        setTimeout(() => {
+            setPendingToggles(prev => {
+                const next = new Set(prev);
+                next.delete(lineIndex);
+                return next;
+            });
+        }, 100);
+    }, [value, onChange, toast]);
+
     // Markdown toolbar buttons
     const toolbarButtons = [
         { icon: 'B', action: () => insertMarkdown('**', '**'), label: 'Bold', shortcut: 'Ctrl+B' },
@@ -270,7 +298,12 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
         { icon: '>', action: () => insertMarkdown('\n> ', '', 0), label: 'Quote', shortcut: 'Ctrl+Q' },
         { icon: '`', action: () => insertMarkdown('`', '`'), label: 'Inline Code', shortcut: 'Ctrl+E' },
         { icon: '⎇', action: () => insertMarkdown('\n```\n', '\n```', 0), label: 'Code Block', shortcut: 'Ctrl+K' },
-        { icon: '[ ]', action: () => insertMarkdown('\n- [ ] ', '', 0), label: 'Task List', shortcut: 'Ctrl+T' },
+        { icon: null, action: () => insertMarkdown('\n- [ ] ', '', 0), label: 'Task List', shortcut: 'Ctrl+T', svgIcon: (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <rect x="3" y="3" width="18" height="18" rx="2" strokeWidth="2"/>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 10l4 4L19 6"/>
+            </svg>
+        ) },
         { icon: null, action: () => insertMarkdown('[]()', '', -1), label: 'Link', shortcut: 'Ctrl+L', svgIcon: (
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
@@ -714,6 +747,8 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
                                     urlPreviews={previews}
                                     maxLines={100} // Don't truncate in editor preview
                                     className="text-sm"
+                                    onCheckboxToggle={handleCheckboxToggle}
+                                    isInteractive={true}
                                 />
                             ) : (
                                 <p className="text-neutral-400 italic">No content to preview</p>

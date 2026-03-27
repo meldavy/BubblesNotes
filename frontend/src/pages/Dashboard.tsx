@@ -11,9 +11,11 @@ import { SearchBar } from '../components/ui/SearchBar';
 import { useAuth } from '../contexts/AuthContext';
 import { NoteCard, Note } from '../components/NoteCard';
 import { fetchWithAuth } from '../api/apiClient';
+import { useToastNotifications } from '../components/ui/Toast';
 
 export const Dashboard: React.FC = () => {
     const { isAuthenticated, getAccessToken } = useAuth();
+    const toast = useToastNotifications();
     const [noteContent, setNoteContent] = useState('');
     const [noteTitle, setNoteTitle] = useState('');
     const [isSaving, setIsSaving] = useState(false);
@@ -453,6 +455,37 @@ export const Dashboard: React.FC = () => {
         }
     };
 
+    // Handle checkbox toggle in note cards - updates note content via API
+    const handleCheckboxToggle = useCallback(async (noteId: number, newContent: string) => {
+        try {
+            const response = await fetchWithAuth(
+                `/api/v1/notes/${noteId}`,
+                {
+                    method: 'PUT',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({
+                        content: newContent,
+                    }),
+                },
+                getAccessToken
+            );
+
+            if (!response.ok) {
+                throw new Error('Failed to update note');
+            }
+
+            // Optimistically update local state
+            const updatedNote = await response.json();
+            setNotes(prev => prev.map(n => 
+                n.id === noteId ? { ...n, content: updatedNote.content, updatedAt: updatedNote.updatedAt } : n
+            ));
+        } catch (err) {
+            console.error('Checkbox toggle failed:', err);
+            toast.error('Failed to update task');
+            throw err;
+        }
+    }, [getAuthHeaders, getAccessToken, toast]);
+
     const handleRefresh = useCallback(async () => {
         if (isRefreshing) return;
         setIsRefreshing(true);
@@ -726,6 +759,7 @@ export const Dashboard: React.FC = () => {
                                         isDeleting={isDeleting === note.id}
                                         onEdit={() => handleEditNote(note)}
                                         onDelete={() => handleDeleteNote(note.id)}
+                                        onCheckboxToggle={handleCheckboxToggle}
                                     />
                                 ))}
                             </div>

@@ -7,6 +7,7 @@ import { ImageModal } from './ui/ImageModal';
 import { extractAttachments, isFileAttachmentUrl } from '../utils/attachmentParser';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchWithAuth } from '../api/apiClient';
+import { toggleTaskCheckbox } from '../utils/taskListUtils';
 
 interface URLPreviewData {
   url: string;
@@ -38,11 +39,13 @@ export interface Note {
 }
 
 export interface NoteCardProps {
-  note: Note;
-  isEditing: boolean;
-  isDeleting: boolean;
-  onEdit: (note: Note) => void;
-  onDelete: (noteId: number) => void;
+   note: Note;
+   isEditing: boolean;
+   isDeleting: boolean;
+   onEdit: (note: Note) => void;
+   onDelete: (noteId: number) => void;
+   /** Optional callback when a checkbox is toggled in the note content */
+   onCheckboxToggle?: (noteId: number, newContent: string) => Promise<void>;
 }
 
 /**
@@ -129,6 +132,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({
     isDeleting,
     onEdit,
     onDelete,
+    onCheckboxToggle,
 }) => {
     // Parse URL previews from previewData
     const urlPreviews: URLPreviewData[] = React.useMemo(() => {
@@ -149,6 +153,8 @@ export const NoteCard: React.FC<NoteCardProps> = ({
     const [imageModalOpen, setImageModalOpen] = useState(false);
     const [selectedImageBlobUrl, setSelectedImageBlobUrl] = useState<string | null>(null);
     const [selectedImageAlt, setSelectedImageAlt] = useState<string>('Image');
+    // State for pending checkbox toggle
+    const [pendingToggle, setPendingToggle] = useState<boolean>(false);
 
     const handleEdit = () => {
         onEdit(note);
@@ -158,12 +164,36 @@ export const NoteCard: React.FC<NoteCardProps> = ({
         onDelete(note.id);
     };
 
-    // Handle image click to open modal - memoized to prevent re-creation on every render
+    // Handle image click to open modal
     const handleImageClick = useCallback((blobUrl: string, alt: string) => {
         setSelectedImageBlobUrl(blobUrl);
         setSelectedImageAlt(alt);
         setImageModalOpen(true);
     }, []);
+
+    // Handle checkbox toggle - updates the note content via API
+    const handleCheckboxToggle = useCallback(async (lineIndex: number, currentContent: string) => {
+        console.log('NoteCard: handleCheckboxToggle called with lineIndex:', lineIndex);
+        if (!onCheckboxToggle) {
+            console.log('NoteCard: No onCheckboxToggle callback');
+            return;
+        }
+        
+        // Toggle the checkbox in the content
+        const result = toggleTaskCheckbox(currentContent, lineIndex);
+        console.log('NoteCard: toggleTaskCheckbox result:', result);
+        
+        if (result.success && result.updatedContent) {
+            setPendingToggle(true);
+            try {
+                await onCheckboxToggle(note.id, result.updatedContent);
+                console.log('NoteCard: Checkbox toggle successful');
+            } catch (error) {
+                console.error('Failed to update note after checkbox toggle:', error);
+                setPendingToggle(false);
+            }
+        }
+    }, [note.id, onCheckboxToggle]);
 
   return (
     <>
@@ -200,6 +230,8 @@ export const NoteCard: React.FC<NoteCardProps> = ({
           content={note.content}
           className="text-sm"
           onImageClick={handleImageClick}
+          onCheckboxToggle={handleCheckboxToggle}
+          isInteractive={!!onCheckboxToggle}
         />
 
         {/* Tags (user-created) */}

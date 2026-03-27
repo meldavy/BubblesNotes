@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
@@ -8,6 +8,7 @@ import { ImageModal } from './ui/ImageModal';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchWithAuth } from '../api/apiClient';
 import { isFileAttachmentUrl } from '../utils/attachmentParser';
+import { parseTaskItems, toggleTaskCheckbox, ToggleResult } from '../utils/taskListUtils';
 
 interface URLPreviewData {
   url: string;
@@ -121,6 +122,16 @@ interface MarkdownPreviewProps {
     urlPreviews?: URLPreviewData[];
     /** Optional callback when image is clicked - receives blob URL */
     onImageClick?: (blobUrl: string, alt: string) => void;
+    /** 
+     * Optional callback for checkbox toggle in task lists
+     * Receives the line index and current content, returns the updated content
+     */
+    onCheckboxToggle?: (lineIndex: number, currentContent: string) => void;
+    /** 
+     * When true, checkboxes in task lists are interactive (clickable)
+     * When false, checkboxes are rendered as disabled (read-only)
+     */
+    isInteractive?: boolean;
 }
 
 /**
@@ -189,9 +200,23 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
     showURLPreviews = false,
     urlPreviews = [],
     onImageClick,
+    onCheckboxToggle,
+    isInteractive = false,
 }) => {
     const { getAccessToken } = useAuth();
     const [selectedImage, setSelectedImage] = useState<{ blobUrl: string; alt: string } | null>(null);
+    
+    // Ref to track the latest content value for use in callbacks
+    const contentRef = useRef(content);
+    useEffect(() => {
+        contentRef.current = content;
+    }, [content]);
+
+    // Parse task items to get their line indices and checkbox states
+    const taskItems = useMemo(() => parseTaskItems(content), [content]);
+    
+    // Counter for tracking task item index during rendering
+    const taskItemCounter = useRef(0);
 
     // Handle image click - open modal with blob URL
     const handleImageClick = useCallback((blobUrl: string, alt: string) => {
@@ -212,13 +237,30 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
         // For non-attachment URLs, allow normal navigation
     }, [getAccessToken]);
 
+    // Handle checkbox click on task list items
+    const handleTaskItemClick = useCallback((lineIndex: number) => {
+        console.log('MarkdownPreview: handleTaskItemClick called with lineIndex:', lineIndex);
+        if (isInteractive && onCheckboxToggle) {
+            // Use contentRef.current to get the latest content, not the stale closure value
+            const latestContent = contentRef.current;
+            console.log('MarkdownPreview: Calling onCheckboxToggle with lineIndex:', lineIndex, 'content:', latestContent);
+            onCheckboxToggle(lineIndex, latestContent);
+        } else {
+            console.log('MarkdownPreview: Not interactive or no callback, isInteractive:', isInteractive, 'onCheckboxToggle:', !!onCheckboxToggle);
+        }
+    }, [isInteractive, onCheckboxToggle]);
+
     if (!content || !content.trim()) {
         return <p className="text-neutral-400 italic">No content</p>;
     }
 
     // Memoized markdown components to prevent re-creation on every render
     // This is critical for performance - without this, all images would re-fetch on every keystroke
-    const markdownComponents = useMemo<Components>(() => ({
+    const markdownComponents = useMemo<Components>(() => {
+        // Reset the task item counter for each render
+        let taskRenderIndex = 0;
+        
+        return {
         h1: ({ children, ...props }) => (
             <h1 className="text-xl font-bold text-neutral-800 mb-2" {...props}>{children}</h1>
         ),
@@ -237,9 +279,99 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
         ol: ({ children, ...props }) => (
             <ol className="list-decimal list-inside mb-2 space-y-1" {...props}>{children}</ol>
         ),
-        li: ({ children, ...props }) => (
-            <li className="text-neutral-600 break-words" {...props}>{children}</li>
-        ),
+        li: ({ children, ...props }) => {
+            // Check if this is a task list item by checking for checkbox in children
+            const childrenArray = React.Children.toArray(children);
+            const hasCheckbox = childrenArray.some(
+                child => React.isValidElement(child) && (child.props as any)?.type === 'checkbox'
+            );
+            
+            // For task list items, use a counter to track which task item we're rendering
+            // This avoids issues with duplicate text content
+            if (hasCheckbox && isInteractive && onCheckboxToggle) {
+                const currentTaskIndex = taskRenderIndex++;
+                
+                // Get the task item at this index
+                const taskItem = taskItems[currentTaskIndex];
+                
+                if (taskItem) {
+                    const lineIndexAttr = taskItem.lineIndex.toString();
+                    
+                    console.log('MarkdownPreview li: Task item', currentTaskIndex, 'lineIndex:', taskItem.lineIndex, 'text:', taskItem.text);
+                    
+                    // Wrap children to add data-line-index to checkbox
+                    const wrappedChildren = React.Children.map(children, (child) => {
+                        if (React.isValidElement(child) && (child.props as any)?.type === 'checkbox') {
+                            return React.cloneElement(child, {
+                                ...(child.props as any),
+                                'data-line-index': lineIndexAttr,
+                            } as any);
+                        }
+                        return child;
+                    });
+                    return <li className="text-neutral-600 break-words task-list-item" {...props}>{wrappedChildren}</li>;
+                } else {
+                    console.log('MarkdownPreview li: No task item at index', currentTaskIndex, 'total task items:', taskItems.length);
+                }
+            }
+            
+            return <li className="text-neutral-600 break-words task-list-item" {...props}>{children}</li>;
+        },
+        input: ({ ...props }) => {
+            // Handle checkbox inputs for task lists
+            if (props.type === 'checkbox') {
+                const checked = props.checked as boolean;
+                
+                // If interactive, make the checkbox clickable
+                if (isInteractive && onCheckboxToggle) {
+                    // The line index is passed via data-line-index on the checkbox
+                    const propsAny = props as any;
+                    const lineIndexAttr = propsAny['data-line-index'] as string | undefined;
+                    const lineIndex = lineIndexAttr ? parseInt(lineIndexAttr, 10) : -1;
+                    
+                    console.log('MarkdownPreview input: Checkbox clicked, lineIndex:', lineIndex, 'checked:', checked);
+                    
+                    const handleClick = (e: React.MouseEvent) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log('MarkdownPreview input: handleClick called, lineIndex:', lineIndex);
+                        if (lineIndex >= 0) {
+                            console.log('MarkdownPreview input: Calling handleTaskItemClick');
+                            handleTaskItemClick(lineIndex);
+                        } else {
+                            console.log('MarkdownPreview input: Invalid lineIndex, not calling handler');
+                        }
+                    };
+                    
+                    // Create props without disabled, and explicitly set disabled to undefined
+                    const { disabled: _, ...restProps } = props;
+                    
+                    return (
+                        <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={undefined}
+                            className="task-list-checkbox interactive"
+                            style={{ cursor: 'pointer' }}
+                            onClick={handleClick}
+                            {...restProps}
+                        />
+                    );
+                }
+                
+                // Non-interactive: render as disabled
+                return (
+                    <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={true}
+                        className="task-list-checkbox"
+                        {...props}
+                    />
+                );
+            }
+            return <input {...props} />;
+        },
         blockquote: ({ children, ...props }) => (
             <blockquote className="border-l-4 border-primary-300 pl-3 my-2 italic text-neutral-600 break-words" {...props}>{children}</blockquote>
         ),
@@ -321,7 +453,43 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
                 />
             );
         },
-    }), [handleImageClick, handleFileAttachmentClick, onImageClick]);
+    } as Components;
+    }, [taskItems, isInteractive, onCheckboxToggle]);
+
+    // Create a map of line index to task item for quick lookup
+    const taskMap = useMemo(() => {
+        const map = new Map<number, { checked: boolean; text: string }>();
+        taskItems.forEach(item => {
+            map.set(item.lineIndex, { checked: item.checked, text: item.text });
+        });
+        return map;
+    }, [taskItems]);
+
+    // Custom li renderer that handles task list items with clickable checkboxes
+    const TaskListItemRenderer = () => {
+        if (!isInteractive || !onCheckboxToggle) {
+            return null;
+        }
+
+        // Render clickable checkboxes for each task item
+        return (
+            <div className="task-checkbox-renderer">
+                {taskItems.map((item) => (
+                    <button
+                        key={item.lineIndex}
+                        type="button"
+                        className="task-checkbox-btn"
+                        onClick={() => handleTaskItemClick(item.lineIndex)}
+                        aria-label={item.checked ? 'Uncheck task' : 'Check task'}
+                    >
+                        <span className={`task-checkbox ${item.checked ? 'checked' : ''}`}>
+                            {item.checked ? '✓' : ''}
+                        </span>
+                    </button>
+                ))}
+            </div>
+        );
+    };
 
     return (
         <div className={`markdown-preview break-words ${className}`}>

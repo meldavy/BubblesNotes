@@ -28,7 +28,12 @@ data class URLPreview(
     val favicon: String? = null,
     val image: String? = null,
     val siteName: String? = null,
-)
+) {
+    /**
+     * Returns true if this preview has any useful metadata (not just the URL)
+     */
+    fun hasMetadata(): Boolean = title != null || description != null || favicon != null || image != null || siteName != null
+}
 
 /**
  * Service for fetching and caching URL previews (Open Graph metadata)
