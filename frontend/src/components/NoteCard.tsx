@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo, memo, useRef } from 'react';
 import { Card } from './ui/Card';
 import { MarkdownPreview } from './MarkdownPreview';
 import { URLPreviewList } from './URLPreview';
@@ -39,13 +39,13 @@ export interface Note {
 }
 
 export interface NoteCardProps {
-   note: Note;
-   isEditing: boolean;
-   isDeleting: boolean;
-   onEdit: (note: Note) => void;
-   onDelete: (noteId: number) => void;
-   /** Optional callback when a checkbox is toggled in the note content */
-   onCheckboxToggle?: (noteId: number, newContent: string) => Promise<void>;
+    note: Note;
+    isEditing: boolean;
+    isDeleting: boolean;
+    onEdit: (note: Note) => void;
+    onDelete: (noteId: number) => void;
+    /** Optional callback when a checkbox is toggled in the note content */
+    onCheckboxToggle?: (noteId: number, newContent: string) => Promise<void>;
 }
 
 /**
@@ -125,17 +125,20 @@ const AttachmentBadge: React.FC<AttachmentBadgeProps> = ({ fileName, url }) => {
 /**
  * NoteCard component - displays a single note card
  * Shows title, content preview, tags, URL previews, and action buttons
+ * 
+ * Memoized with React.memo and a custom comparison function to prevent unnecessary re-renders
+ * when other notes update. Only re-renders when this specific note's content actually changes.
  */
-export const NoteCard: React.FC<NoteCardProps> = ({
+export const NoteCard = memo(({
     note,
     isEditing,
     isDeleting,
     onEdit,
     onDelete,
     onCheckboxToggle,
-}) => {
+}: NoteCardProps) => {
     // Parse URL previews from previewData
-    const urlPreviews: URLPreviewData[] = React.useMemo(() => {
+    const urlPreviews: URLPreviewData[] = useMemo(() => {
         if (!note.previewData) return [];
         try {
             return JSON.parse(note.previewData);
@@ -145,7 +148,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({
     }, [note.previewData]);
 
     // Extract file attachments from content
-    const attachments = React.useMemo(() => {
+    const attachments = useMemo(() => {
         return extractAttachments(note.content);
     }, [note.content]);
 
@@ -153,8 +156,6 @@ export const NoteCard: React.FC<NoteCardProps> = ({
     const [imageModalOpen, setImageModalOpen] = useState(false);
     const [selectedImageBlobUrl, setSelectedImageBlobUrl] = useState<string | null>(null);
     const [selectedImageAlt, setSelectedImageAlt] = useState<string>('Image');
-    // State for pending checkbox toggle
-    const [pendingToggle, setPendingToggle] = useState<boolean>(false);
 
     const handleEdit = () => {
         onEdit(note);
@@ -172,6 +173,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({
     }, []);
 
     // Handle checkbox toggle - updates the note content via API
+    // The parent passes the current content to ensure we're always working with the latest
     const handleCheckboxToggle = useCallback(async (lineIndex: number, currentContent: string) => {
         console.log('NoteCard: handleCheckboxToggle called with lineIndex:', lineIndex);
         if (!onCheckboxToggle) {
@@ -184,13 +186,11 @@ export const NoteCard: React.FC<NoteCardProps> = ({
         console.log('NoteCard: toggleTaskCheckbox result:', result);
         
         if (result.success && result.updatedContent) {
-            setPendingToggle(true);
             try {
                 await onCheckboxToggle(note.id, result.updatedContent);
                 console.log('NoteCard: Checkbox toggle successful');
             } catch (error) {
                 console.error('Failed to update note after checkbox toggle:', error);
-                setPendingToggle(false);
             }
         }
     }, [note.id, onCheckboxToggle]);
@@ -371,6 +371,15 @@ export const NoteCard: React.FC<NoteCardProps> = ({
       />
     </>
   );
-};
+}, (prev, next) => {
+    // Custom comparison: only re-render if note content actually changed
+    // This prevents re-renders when other notes update or when callback props change
+    return (
+        prev.note.id === next.note.id &&
+        prev.note.content === next.note.content &&
+        prev.isEditing === next.isEditing &&
+        prev.isDeleting === next.isDeleting
+    );
+});
 
 export default NoteCard;

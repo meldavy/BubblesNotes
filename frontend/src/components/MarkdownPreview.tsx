@@ -32,8 +32,11 @@ interface AuthenticatedImageProps {
  * Since browser <img> tags cannot send authentication headers, this component
  * fetches the image as a blob with the auth token and displays it as a data URL.
  * Uses the shared fetchWithAuth mechanism for automatic token refresh.
+ * 
+ * Uses a shared image cache (passed via imageCacheRef) to prevent re-fetching
+ * images when the parent component re-renders.
  */
-const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({ src, alt, className, onClick }) => {
+const AuthenticatedImage: React.FC<AuthenticatedImageProps & { imageCacheRef?: React.MutableRefObject<Map<string, string>> }> = ({ src, alt, className, onClick, imageCacheRef }) => {
   const { getAccessToken } = useAuth();
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -44,6 +47,13 @@ const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({ src, alt, class
 
     const fetchImage = async () => {
       try {
+        // Check if image is already cached
+        if (imageCacheRef?.current.has(src)) {
+          setImageUrl(imageCacheRef.current.get(src)!);
+          setLoading(false);
+          return;
+        }
+
         const response = await fetchWithAuth(
           src,
           {
@@ -61,6 +71,8 @@ const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({ src, alt, class
         const blob = await response.blob();
         if (!cancelled) {
           const url = URL.createObjectURL(blob);
+          // Cache the image URL
+          imageCacheRef?.current.set(src, url);
           setImageUrl(url);
         }
         setLoading(false);
@@ -73,13 +85,15 @@ const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({ src, alt, class
     fetchImage();
 
     // Cleanup: revoke the object URL when component unmounts
+    // Note: We don't revoke cached URLs as they may be used by other instances
     return () => {
       cancelled = true;
-      if (imageUrl) {
+      // Only revoke if not cached
+      if (imageUrl && !imageCacheRef?.current.has(src)) {
         URL.revokeObjectURL(imageUrl);
       }
     };
-  }, [src, getAccessToken]);
+  }, [src, getAccessToken, imageCacheRef]);
 
   if (loading) {
     return (
@@ -205,6 +219,10 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
 }) => {
     const { getAccessToken } = useAuth();
     const [selectedImage, setSelectedImage] = useState<{ blobUrl: string; alt: string } | null>(null);
+    
+    // Shared image cache to prevent re-fetching images on re-renders
+    // This ref persists across re-renders, so images are cached as long as the component is mounted
+    const imageCacheRef = useRef<Map<string, string>>(new Map());
     
     // Ref to track the latest content value for use in callbacks
     const contentRef = useRef(content);
@@ -440,7 +458,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
                 (imageSrc.includes('/api/v1/notes/') && imageSrc.includes('/images/') && imageSrc.includes('/download')) ||
                 imageSrc.includes('/api/v1/attachments/download')
             )) {
-                return <AuthenticatedImage src={imageSrc} alt={imageAlt} className={className} onClick={handleImageClick} />;
+                return <AuthenticatedImage src={imageSrc} alt={imageAlt} className={className} onClick={handleImageClick} imageCacheRef={imageCacheRef} />;
             }
             // For external images, render normally with click handler
             return (
