@@ -84,22 +84,28 @@ fun Application.configureJWTAuthentication(
             // Custom token extraction: check Authorization header first, then access_token cookie
             authHeader { call ->
                 // First try Authorization header
-                val authHeader = call.request.headers["Authorization"]
-                var token = authHeader?.substringAfter("Bearer ", "")?.trim()
+                val authHeaderValue = call.request.headers["Authorization"]
+                var token = authHeaderValue?.substringAfter("Bearer ", "")?.trim()
 
                 // If no header, try access_token cookie
                 if (token.isNullOrBlank()) {
-                    token = call.request.cookies["access_token"]
+                    val cookieValue = call.request.cookies.rawCookies["access_token"]
+                    if (cookieValue != null) {
+                        token = cookieValue
+                    }
                 }
 
                 // Return HttpAuthHeader if token found, null otherwise
-                return@authHeader token?.takeIf { it.isNotBlank() }?.let {
+                val result = token?.takeIf { it.isNotBlank() }?.let {
                     io.ktor.http.auth.HttpAuthHeader.Single("Bearer", it)
                 }
+                
+                return@authHeader result
             }
             validate { credentials ->
                 // Extract user ID from JWT subject
                 val userIdString = credentials.payload.subject
+                
                 val userId =
                     try {
                         UUID.fromString(userIdString)
@@ -114,6 +120,11 @@ fun Application.configureJWTAuthentication(
                 } else {
                     null
                 }
+            }
+            
+            // Add challenge handler for when authentication fails
+            challenge { _, _ ->
+                // Authentication failed - Ktor will send 401 response
             }
         }
     }

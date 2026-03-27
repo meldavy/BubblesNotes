@@ -7,7 +7,6 @@ import { ImageModal } from './ui/ImageModal';
 import { extractAttachments, isFileAttachmentUrl } from '../utils/attachmentParser';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchWithAuth } from '../api/apiClient';
-import { toggleTaskCheckbox } from '../utils/taskListUtils';
 
 interface URLPreviewData {
   url: string;
@@ -45,7 +44,7 @@ export interface NoteCardProps {
     onEdit: (note: Note) => void;
     onDelete: (noteId: number) => void;
     /** Optional callback when a checkbox is toggled in the note content */
-    onCheckboxToggle?: (noteId: number, newContent: string) => Promise<void>;
+    onCheckboxToggle?: (noteId: number, lineIndex: number, currentContent: string) => Promise<void>;
 }
 
 /**
@@ -172,8 +171,7 @@ export const NoteCard = memo(({
         setImageModalOpen(true);
     }, []);
 
-    // Handle checkbox toggle - updates the note content via API
-    // The parent passes the current content to ensure we're always working with the latest
+    // Handle checkbox toggle - passes the request to parent for optimistic update
     const handleCheckboxToggle = useCallback(async (lineIndex: number, currentContent: string) => {
         console.log('NoteCard: handleCheckboxToggle called with lineIndex:', lineIndex);
         if (!onCheckboxToggle) {
@@ -181,17 +179,12 @@ export const NoteCard = memo(({
             return;
         }
         
-        // Toggle the checkbox in the content
-        const result = toggleTaskCheckbox(currentContent, lineIndex);
-        console.log('NoteCard: toggleTaskCheckbox result:', result);
-        
-        if (result.success && result.updatedContent) {
-            try {
-                await onCheckboxToggle(note.id, result.updatedContent);
-                console.log('NoteCard: Checkbox toggle successful');
-            } catch (error) {
-                console.error('Failed to update note after checkbox toggle:', error);
-            }
+        // Pass to parent for optimistic update - parent handles the toggle logic and API call
+        try {
+            await onCheckboxToggle(note.id, lineIndex, currentContent);
+            console.log('NoteCard: Checkbox toggle successful');
+        } catch (error) {
+            console.error('Failed to update note after checkbox toggle:', error);
         }
     }, [note.id, onCheckboxToggle]);
 

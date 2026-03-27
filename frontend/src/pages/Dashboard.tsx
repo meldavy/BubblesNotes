@@ -486,8 +486,25 @@ export const Dashboard: React.FC = () => {
         }
     };
 
-    // Handle checkbox toggle in note cards - updates note content via API
-    const handleCheckboxToggle = useCallback(async (noteId: number, newContent: string) => {
+    // Handle checkbox toggle in note cards - updates note content via API with optimistic UI
+    const handleCheckboxToggle = useCallback(async (noteId: number, lineIndex: number, currentContent: string) => {
+        // Import toggleTaskCheckbox here to avoid circular dependency
+        const { toggleTaskCheckbox } = await import('../utils/taskListUtils');
+        
+        // Toggle the checkbox in the content locally first
+        const result = toggleTaskCheckbox(currentContent, lineIndex);
+        
+        if (!result.success || !result.updatedContent) {
+            console.error('Failed to toggle checkbox locally');
+            return;
+        }
+        
+        // OPTIMISTIC UPDATE: Immediately update the UI before API call completes
+        // This provides instant visual feedback to the user
+        setNotes(prev => prev.map(n => 
+            n.id === noteId ? { ...n, content: result.updatedContent!, updatedAt: Date.now() } : n
+        ));
+        
         try {
             const response = await fetchWithAuth(
                 `/api/v1/notes/${noteId}`,
@@ -495,7 +512,7 @@ export const Dashboard: React.FC = () => {
                     method: 'PUT',
                     headers: getAuthHeaders(),
                     body: JSON.stringify({
-                        content: newContent,
+                        content: result.updatedContent,
                     }),
                 },
                 getAccessToken
@@ -505,7 +522,7 @@ export const Dashboard: React.FC = () => {
                 throw new Error('Failed to update note');
             }
 
-            // Optimistically update local state
+            // Server confirmed the update - sync with server response
             const updatedNote = await response.json();
             setNotes(prev => prev.map(n => 
                 n.id === noteId ? { ...n, content: updatedNote.content, updatedAt: updatedNote.updatedAt } : n
@@ -513,6 +530,10 @@ export const Dashboard: React.FC = () => {
         } catch (err) {
             console.error('Checkbox toggle failed:', err);
             toast.error('Failed to update task');
+            // REVERT ON FAILURE: If API fails, revert to the original content
+            setNotes(prev => prev.map(n => 
+                n.id === noteId ? { ...n, content: currentContent, updatedAt: Date.now() } : n
+            ));
             throw err;
         }
     }, [getAuthHeaders, getAccessToken, toast]);

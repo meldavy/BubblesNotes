@@ -137,10 +137,10 @@ interface MarkdownPreviewProps {
     /** Optional callback when image is clicked - receives blob URL */
     onImageClick?: (blobUrl: string, alt: string) => void;
     /** 
-     * Optional callback for checkbox toggle in task lists
-     * Receives the line index and current content, returns the updated content
-     */
-    onCheckboxToggle?: (lineIndex: number, currentContent: string) => void;
+      * Optional callback for checkbox toggle in task lists
+      * Receives the line index and current content, returns Promise<void>
+      */
+    onCheckboxToggle?: (lineIndex: number, currentContent: string) => Promise<void>;
     /** 
      * When true, checkboxes in task lists are interactive (clickable)
      * When false, checkboxes are rendered as disabled (read-only)
@@ -262,7 +262,10 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
             // Use contentRef.current to get the latest content, not the stale closure value
             const latestContent = contentRef.current;
             console.log('MarkdownPreview: Calling onCheckboxToggle with lineIndex:', lineIndex, 'content:', latestContent);
-            onCheckboxToggle(lineIndex, latestContent);
+            // Fire and forget - don't await, let the parent handle the optimistic update
+            onCheckboxToggle(lineIndex, latestContent).catch((err: unknown) => {
+                console.error('Checkbox toggle failed:', err);
+            });
         } else {
             console.log('MarkdownPreview: Not interactive or no callback, isInteractive:', isInteractive, 'onCheckboxToggle:', !!onCheckboxToggle);
         }
