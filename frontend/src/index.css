@@ -268,8 +268,209 @@ button {
 }
 
 /* ========================================
-   DARK MODE SUPPORT
-   ======================================== */
+    DARK MODE SUPPORT
+    ======================================== */
 [data-theme='dark'] {
   color-scheme: dark;
+}
+
+/* ========================================
+    MDXEDITOR OVERRIDES
+    ======================================== */
+/* Fix checkbox positioning in MDXEditor task lists */
+._listItemChecked_1tncs_73,
+._listItemUnchecked_1tncs_74 {
+  margin-inline-start: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+/* Adjust the checkbox pseudo-element positioning */
+._listItemUnchecked_1tncs_74:before,
+._listItemChecked_1tncs_73:before {
+  position: static !important;
+  margin-right: var(--spacing-1);
+}
+
+/* ========================================
+   MDXEDITOR LIST MARKERS FIX
+   Restore bullet/number markers for regular lists
+   ======================================== */
+
+/* 
+ * The MDXEditor uses hashed CSS module class names that can change between builds.
+ * We use a combination of tag selectors and attribute selectors to target regular lists.
+ * Task lists have data-task="true" attribute or the checked/unchecked classes.
+ */
+
+/* Reset for all list items in MDXEditor content area - ensure ::marker is not suppressed */
+.mdxeditor ._contentEditable_1e2ox_380 li::marker,
+.mdxeditor li::marker {
+  display: list-item !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+/* Unordered lists - restore disc markers */
+.mdxeditor ._contentEditable_1e2ox_380 ul li,
+.mdxeditor ul li {
+  list-style-type: disc !important;
+}
+
+/* Ordered lists - restore decimal markers */
+.mdxeditor ._contentEditable_1e2ox_380 ol li,
+.mdxeditor ol li {
+  list-style-type: decimal !important;
+}
+
+/* Nested unordered lists */
+.mdxeditor ._contentEditable_1e2ox_380 ul ul li,
+.mdxeditor ul ul li {
+  list-style-type: disc !important;
+}
+
+/* Nested ordered lists */
+.mdxeditor ._contentEditable_1e2ox_380 ol ol li,
+.mdxeditor ol ol li {
+  list-style-type: decimal !important;
+}
+
+/* Mixed nested lists (ol inside ul) */
+.mdxeditor ._contentEditable_1e2ox_380 ul ol li,
+.mdxeditor ul ol li {
+  list-style-type: decimal !important;
+}
+
+/* Mixed nested lists (ul inside ol) */
+.mdxeditor ._contentEditable_1e2ox_380 ol ul li,
+.mdxeditor ol ul li {
+  list-style-type: disc !important;
+}
+
+/* Override MDXEditor's nestedListItem styles that hide markers for non-task lists */
+.mdxeditor ._contentEditable_1e2ox_380 ._nestedListItem_1tncs_59:not(._listItemChecked_1tncs_73):not(._listItemUnchecked_1tncs_74),
+.mdxeditor ._nestedListItem_1tncs_59:not(._listItemChecked_1tncs_73):not(._listItemUnchecked_1tncs_74) {
+  list-style: inherit !important;
+  list-style-type: inherit !important;
+}
+
+.mdxeditor ._contentEditable_1e2ox_380 ._nestedListItem_1tncs_59:not(._listItemChecked_1tncs_73):not(._listItemUnchecked_1tncs_74)::before,
+.mdxeditor ._contentEditable_1e2ox_380 ._nestedListItem_1tncs_59:not(._listItemChecked_1tncs_73):not(._listItemUnchecked_1tncs_74)::after,
+.mdxeditor ._nestedListItem_1tncs_59:not(._listItemChecked_1tncs_73):not(._listItemUnchecked_1tncs_74)::before,
+.mdxeditor ._nestedListItem_1tncs_59:not(._listItemChecked_1tncs_73):not(._listItemUnchecked_1tncs_74)::after {
+  display: list-item !important;
+}
+
+/* Ensure ::marker pseudo-element is visible for regular list items */
+.mdxeditor ._contentEditable_1e2ox_380 li._listitem_1tncs_69:not(._listItemChecked_1tncs_73):not(._listItemUnchecked_1tncs_74)::marker,
+.mdxeditor li._listitem_1tncs_69:not(._listItemChecked_1tncs_73):not(._listItemUnchecked_1tncs_74)::marker {
+  display: list-item !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  color: inherit !important;
+}
+
+/* Ensure proper indentation for regular list items */
+.mdxeditor ._contentEditable_1e2ox_380 ul li._listitem_1tncs_69:not(._listItemChecked_1tncs_73):not(._listItemUnchecked_1tncs_74),
+.mdxeditor ul li._listitem_1tncs_69:not(._listItemChecked_1tncs_73):not(._listItemUnchecked_1tncs_74) {
+  margin-left: 1.5rem !important;
+  padding-left: 0.25rem !important;
+}
+
+.mdxeditor ._contentEditable_1e2ox_380 ol li._listitem_1tncs_69:not(._listItemChecked_1tncs_73):not(._listItemUnchecked_1tncs_74),
+.mdxeditor ol li._listitem_1tncs_69:not(._listItemChecked_1tncs_73):not(._listItemUnchecked_1tncs_74) {
+  margin-left: 1.5rem !important;
+  padding-left: 0.25rem !important;
+}
+
+/* Nested list indentation */
+.mdxeditor ._contentEditable_1e2ox_380 ul ul li,
+.mdxeditor ul ul li,
+.mdxeditor ._contentEditable_1e2ox_380 ol ol li,
+.mdxeditor ol ol li {
+  margin-left: 2rem !important;
+}
+
+/* ========================================
+   MARKDOWN PREVIEW LIST MARKERS FIX
+   Restore bullet/number markers for rendered markdown
+   ======================================== */
+
+/* Ensure ::marker is visible for all lists in markdown-preview */
+.markdown-preview ul li::marker,
+.markdown-preview ol li::marker {
+  display: list-item !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  color: inherit !important;
+}
+
+/* Force list-style-type for unordered lists - use inside position */
+.markdown-preview ul,
+.markdown-preview ul[class*="list-disc"] {
+  list-style-type: disc !important;
+  list-style-position: inside !important;
+}
+
+/* Force list-style-type for ordered lists - use inside position */
+.markdown-preview ol,
+.markdown-preview ol[class*="list-decimal"] {
+  list-style-type: decimal !important;
+  list-style-position: inside !important;
+}
+
+/* Nested unordered lists */
+.markdown-preview ul ul {
+  list-style-type: disc !important;
+  list-style-position: inside !important;
+}
+
+/* Nested ordered lists */
+.markdown-preview ol ol {
+  list-style-type: decimal !important;
+  list-style-position: inside !important;
+}
+
+/* Mixed nested lists */
+.markdown-preview ul ol {
+  list-style-type: decimal !important;
+  list-style-position: inside !important;
+}
+
+.markdown-preview ol ul {
+  list-style-type: disc !important;
+  list-style-position: inside !important;
+}
+
+/* Ensure list items have proper display */
+.markdown-preview li {
+  display: list-item !important;
+}
+
+.markdown-preview ul li {
+  list-style-type: disc !important;
+}
+
+.markdown-preview ol li {
+  list-style-type: decimal !important;
+}
+
+/* Remove markers from task list items (those with checkboxes) */
+.markdown-preview .contains-task-list li::marker {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+}
+
+.markdown-preview .contains-task-list li {
+  list-style-type: none !important;
+}
+
+/* Remove padding/margin that might affect marker positioning */
+.markdown-preview li > p {
+  margin: 0;
+  padding: 0;
 }

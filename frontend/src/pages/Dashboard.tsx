@@ -13,6 +13,8 @@ import { NoteCard, Note } from '../components/NoteCard';
 import { fetchWithAuth } from '../api/apiClient';
 import { useToastNotifications } from '../components/ui/Toast';
 
+type EditorMode = 'classic' | 'mdx';
+
 export const Dashboard: React.FC = () => {
     const { isAuthenticated, getAccessToken } = useAuth();
     const toast = useToastNotifications();
@@ -30,6 +32,8 @@ export const Dashboard: React.FC = () => {
     const touchStartY = React.useRef<number | null>(null);
     const hasInitialLoaded = useRef(false);
     const [noteTags, setNoteTags] = useState<string[]>([]);
+    const [editorMode, setEditorMode] = useState<EditorMode>('classic');
+    const [mobileEditorVisible, setMobileEditorVisible] = useState(false);
     
     // Helper function to get headers with JWT token
     const getAuthHeaders = (includeContentType: boolean = true): Record<string, string> => {
@@ -347,6 +351,8 @@ export const Dashboard: React.FC = () => {
                     setEditingNoteId(null);
                     setNoteContent('');
                     setNoteTitle('');
+                    // Hide mobile editor after saving
+                    setMobileEditorVisible(false);
                 } else {
                     // Revert optimistic update on failure
                     setNotes(prev => prev.filter(n => n.id !== editingNoteId));
@@ -384,13 +390,15 @@ export const Dashboard: React.FC = () => {
                 );
 
                   if (response.ok) {
-                       const createdNote = await response.json();
-                       // Replace temporary note with actual note from server
-                       setNotes(prev => prev.map(n => (n.id === tempId ? createdNote : n)));
-                       
-                       // Clear tags input after successful save
-                       setNoteTags([]);
-                   } else {
+                        const createdNote = await response.json();
+                        // Replace temporary note with actual note from server
+                        setNotes(prev => prev.map(n => (n.id === tempId ? createdNote : n)));
+                        
+                        // Clear tags input after successful save
+                        setNoteTags([]);
+                        // Hide mobile editor after saving
+                        setMobileEditorVisible(false);
+                    } else {
                     // Remove temporary note on failure
                     setNotes(prev => prev.filter(n => n.id !== tempId));
                     throw new Error('Failed to create note');
@@ -414,6 +422,11 @@ export const Dashboard: React.FC = () => {
         setNoteTags(note.tags || []);
         
         window.scrollTo({ top: 0, behavior: 'smooth' });
+        
+        // On mobile, show the editor when editing a note
+        if (window.innerWidth < 768) {
+            setMobileEditorVisible(true);
+        }
     };
 
     const handleCancelEdit = async () => {
@@ -421,6 +434,24 @@ export const Dashboard: React.FC = () => {
         setNoteContent('');
         setNoteTitle('');
         setNoteTags([]); // Clear tags when canceling edit
+    };
+
+    const handleNewNote = () => {
+        // Clear editor and show it on mobile
+        setNoteContent('');
+        setNoteTitle('');
+        setNoteTags([]);
+        setEditingNoteId(null);
+        setMobileEditorVisible(true);
+    };
+
+    const handleCancelMobileEditor = () => {
+        setMobileEditorVisible(false);
+        // Also clear edit mode state to exit editing mode
+        setEditingNoteId(null);
+        setNoteContent('');
+        setNoteTitle('');
+        setNoteTags([]);
     };
 
     const handleDeleteNote = async (noteId: number) => {
@@ -524,7 +555,7 @@ export const Dashboard: React.FC = () => {
 
     return (
         <div
-            className="min-h-screen bg-neutral-50"
+            className={`min-h-screen bg-neutral-50 ${mobileEditorVisible ? 'md:overflow-hidden' : ''}`}
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
         >
@@ -541,25 +572,53 @@ export const Dashboard: React.FC = () => {
             {/* Header */}
             <Header title="BubblesNotes" showAuth={false} />
 
-            <main className="max-w-7xl mx-auto px-4 py-6 pb-20 md:pb-6">
-                {/* Quick Note Editor - Sticky at top */}
-                <section className="mb-8 animate-slide-up">
-                    <NoteEditor
-                         value={noteContent}
-                         onChange={setNoteContent}
-                         onSave={handleSaveNote}
-                         placeholder={editingNoteId !== null ? "Edit your note here... (Ctrl+S to save)" : "Type a quick note here... (Ctrl+S to save)"}
-                        isEditing={editingNoteId !== null}
-                        onCancel={editingNoteId !== null ? handleCancelEdit : undefined}
-                        isSaving={isSaving}
-                        noteId={editingNoteId}
-                        tags={noteTags}
-                        onTagChange={setNoteTags}
-                    />
-                </section>
+            {/* Mobile Full-Screen Editor Container */}
+            {mobileEditorVisible ? (
+                <div className="md:hidden fixed inset-0 top-[56px] bg-white overflow-hidden z-40">
+                    <div className="h-full flex flex-col">
+                        {/* Editor Container - Takes remaining space with scroll */}
+                        <div className="flex-1 overflow-y-auto">
+                            <div className="p-4 pb-24">
+                                <NoteEditor
+                                    key={editingNoteId ?? 'quick-note'}
+                                    value={noteContent}
+                                    onChange={setNoteContent}
+                                    onSave={handleSaveNote}
+                                    placeholder={editingNoteId !== null ? "Edit your note here... (Ctrl+S to save)" : "Type a quick note here... (Ctrl+S to save)"}
+                                    isEditing={editingNoteId !== null}
+                                    onCancel={handleCancelMobileEditor}
+                                    isSaving={isSaving}
+                                    noteId={editingNoteId}
+                                    tags={noteTags}
+                                    onTagChange={setNoteTags}
+                                    autoFocus={true}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                <main className="max-w-7xl mx-auto px-4 py-6 pb-20 md:pb-6">
+                    {/* Quick Note Editor - Hidden on mobile by default, shown via New Note button */}
+                    <section className="mb-8 animate-slide-up hidden md:block">
+                        <NoteEditor
+                            key={editingNoteId ?? 'quick-note'}
+                            value={noteContent}
+                            onChange={setNoteContent}
+                            onSave={handleSaveNote}
+                            placeholder={editingNoteId !== null ? "Edit your note here... (Ctrl+S to save)" : "Type a quick note here... (Ctrl+S to save)"}
+                            isEditing={editingNoteId !== null}
+                            onCancel={editingNoteId !== null ? handleCancelEdit : undefined}
+                            isSaving={isSaving}
+                            noteId={editingNoteId}
+                            tags={noteTags}
+                            onTagChange={setNoteTags}
+                            autoFocus={editingNoteId !== null}
+                        />
+                    </section>
 
-                {/* Notes Grid */}
-                <section>
+                    {/* Notes Grid */}
+                    <section>
                     {/* Search and Filter Bar */}
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
                         <h2 className="text-xl font-semibold text-neutral-800">
@@ -567,7 +626,7 @@ export const Dashboard: React.FC = () => {
                         </h2>
                         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                             {/* Search Bar */}
-                            <div className="w-full sm:w-72">
+                            <div className="w-full">
                                 <SearchBar
                                     placeholder="Search notes..."
                                     value={searchQuery}
@@ -578,7 +637,7 @@ export const Dashboard: React.FC = () => {
                                 />
                             </div>
                             {/* Tag Filter Dropdown */}
-                            <Menu as="div" className="relative">
+                            <Menu as="div" className="relative hidden md:block">
                                 <Menu.Button className="
                                     flex items-center justify-between
                                     h-10 px-4 py-0 leading-none
@@ -774,7 +833,27 @@ export const Dashboard: React.FC = () => {
                         </>
                     )}
                 </section>
-            </main>
+                </main>
+            )}
+
+            {/* Mobile New Note Footer Button - Only shown when editor is not visible */}
+            {!mobileEditorVisible && (
+                <div className="md:hidden fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-neutral-200 shadow-lg z-50">
+                    <Button
+                        variant="primary"
+                        size="lg"
+                        onClick={handleNewNote}
+                        className="w-full"
+                    >
+                        <div className="flex items-center justify-center space-x-2">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                            <span>New Note</span>
+                        </div>
+                    </Button>
+                </div>
+            )}
         </div>
     );
 };
